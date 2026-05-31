@@ -30,7 +30,13 @@ jobs:
     name: Pipeline Completion
     runs-on: ubuntu-latest
     if: always()
+    needs:
+      - shellcheck
+      - shfmt
+      - ruff
+      - unit_test
     steps:
-      - name: Pipeline succeeded
-        if: needs.unit_test.result == 'success'
-        run: printf "All checks passed successfully!\n"
+      - name: Determine Pipeline Succes
+        uses: re-actors/alls-green@release/v1
+        with:
+          jobs: ${{ toJSON(needs) }}
