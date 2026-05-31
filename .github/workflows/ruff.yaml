@@ -16,8 +16,8 @@ jobs:
         with:
           args: "--version"
 
-     - name: Ruff Check
-       run: ruff check --fix
+      - name: Ruff Check
+        run: ruff check --fix
 
-    - name: Ruff Format
-      run: ruff format --check --diff
+      - name: Ruff Format
+        run: ruff format --check --diff
