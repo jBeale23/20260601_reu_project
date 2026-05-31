@@ -1,0 +1,16 @@
+name: Run Unit Tests
+
+on:
+  workflow_call:
+
+jobs:
+  test:
+    name: Execute Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Run Make Test
+        run: make test
