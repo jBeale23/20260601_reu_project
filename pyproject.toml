@@ -1,0 +1,39 @@
+[tool.ruff]
+line-length = 120
+output-format = "grouped"
+respect-gitignore = true
+show-fixes = true
+
+[tool.ruff.format]
+indent-style = "space"
+line-ending = "lf"
+quote-style = "double"
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = ["ALL"]
+
+ignore = [
+	"YTT",    # flake8-2020
+	"CPY",    # flake8-copyright"
+	"COM812", # missing-trailing-comma
+	"COM819", # prohibited-trailing-comma
+	"D206",   # docstring-tab-indentation
+	"D300",   # triple-single-quotes
+	"E111",   # indentation-with-invalid-multiple
+	"E114",   # indentation-with-invalid-multiple-comment
+	"E117",   # over-indented
+	"E501",   # line-too-long
+	"Q000",   # bad-quotes-inline-string
+	"Q001",   # bad-quotes-multiline-string
+	"Q002",   # bad-quotes-docstring
+	"Q003",   # avoidable-escaped-quote
+	"W191",   # tab-indentation
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore unused imports in __init__.py files
+"__init__.py" = ["F401"]
