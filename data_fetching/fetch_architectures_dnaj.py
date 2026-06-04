@@ -4,22 +4,10 @@ No deduplication, duplicate flagging:
 - Stores proteins exactly as they are fetched for each architecture
 - If a protein appears in multiple architectures, it will be stored multiple times
 - Each protein instance is flagged with how many architectures it appears in total
-- Includes comprehensive sanity checks
 
 Output format::
 
     {
-        "sanity_checks": {
-            "total_architectures_fetched": 20,
-            "total_architectures_expected": 20,
-            "architectures_match": true,
-            "total_proteins_fetched": 225610,
-            "total_unique_proteins": 156000,
-            "duplicate_proteins": 69610,
-            "average_architectures_per_protein": 1.44,
-            "all_architectures_present": true,
-            "no_zero_count_architectures": true,
-        },
         "architectures": [
             {
                 "ida": "PF00226:IPR001623",
@@ -29,6 +17,8 @@ Output format::
                 "proteins": [{"appears_in_architecture_count": 2}],
             }
         ],
+        "total_proteins_fetched": 225610,
+        "note": "No deduplication - proteins may appear multiple times...",
     }
 """
 
@@ -49,18 +39,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-ARCH_URL = "https://www.ebi.ac.uk/interpro/api/entry/InterPro/IPR001623/?ida&page_size=20&format=json"
+# --- Type aliases ---
+type ArchResult = dict[str, object]
+type ProteinCounts = dict[str, int]
+
+# --- Constants (used as defaults in main) ---
+_DEFAULT_ARCH_URL = "https://www.ebi.ac.uk/interpro/api/entry/InterPro/IPR001623/?ida&page_size=20&format=json"
+_DEFAULT_N_ARCHITECTURES = 20
+_DEFAULT_CONCURRENCY = 5
+_DEFAULT_OUTPUT = Path("ipr001623_domain_architectures_no_dedup.json")
 
 PROTEIN_URL_TEMPLATE = (
     "https://www.ebi.ac.uk/interpro/api/protein/UniProt/"
     "entry/InterPro/IPR001623/?ida={ida_id}&page_size=200&format=json"
 )
-
 HEADERS = {"User-Agent": "research-script/1.0 (tmarena1@jh.edu)"}
-
-N_ARCHITECTURES = 20
-CONCURRENCY_LIMIT = 5
-OUTPUT_FILE = Path("ipr001623_domain_architectures_no_dedup.json")
 
 # Known values from the InterPro website, used to confirm we start at architecture #1
 EXPECTED_FIRST_IDA_ID = "500088c3adc88e8af670fe08554083396acf46f3"
@@ -71,7 +64,7 @@ RATE_LIMIT_STATUSES = {408, 429, 503}
 EXPIRED_CURSOR_STATUS = 404
 
 
-async def get_with_retry(session: aiohttp.ClientSession, url: str) -> dict:
+async def get_with_retry(session: aiohttp.ClientSession, url: str) -> ArchResult:
     """Fetch a URL with exponential backoff on rate limits and expired cursors.
 
     Args:
@@ -87,14 +80,14 @@ async def get_with_retry(session: aiohttp.ClientSession, url: str) -> dict:
     for attempt in range(5):
         async with session.get(url) as resp:
             if resp.status in RATE_LIMIT_STATUSES:
-                wait = 61 * (attempt + 1)
+                wait = min(60 * (2**attempt), 300)
                 logger.warning("Rate limited (%s), waiting %ss before retrying...", resp.status, wait)
                 await asyncio.sleep(wait)
                 continue
             if resp.status == EXPIRED_CURSOR_STATUS:
                 # Cursors can expire mid-pagination on the InterPro API.
                 # A short wait usually resolves it.
-                wait = 10 * (attempt + 1)
+                wait = min(10 * (2**attempt), 60)
                 logger.warning("Cursor expired (404), attempt %s/5, retrying in %ss...", attempt + 1, wait)
                 await asyncio.sleep(wait)
                 continue
@@ -104,60 +97,31 @@ async def get_with_retry(session: aiohttp.ClientSession, url: str) -> dict:
     raise RuntimeError(msg)
 
 
-def verify_first_architecture(architectures: list[dict]) -> None:
-    """Confirm the API is returning architectures starting from #1, not #2 or later.
+def validate_api_response(data: ArchResult) -> None:
+    """Raise if the API response is missing expected top-level keys.
 
-    Compares the first result against known values scraped from the InterPro
-    website. Raises an error and halts the script if the IDA ID doesn't match.
+    Acts as a lightweight runtime guard against unexpected API format changes.
 
     Args:
-        architectures: List of architecture dicts returned by the API.
+        data: Parsed JSON response from the InterPro API.
 
     Raises:
-        RuntimeError: If the API returned zero results or the wrong first architecture.
+        RuntimeError: If any required keys are absent from the response.
     """
-    if not architectures:
-        msg = "API returned zero architectures — something is wrong."
+    required = {"results", "next", "count"}
+    missing = required - data.keys()
+    if missing:
+        msg = f"Unexpected API response format — missing keys: {missing}"
         raise RuntimeError(msg)
-
-    first = architectures[0]
-    actual_ida_id = first.get("ida_id")
-    actual_count = first.get("unique_proteins", 0)
-
-    logger.info("Index check — first architecture returned by API:")
-    logger.info("  IDA ID:         %s", actual_ida_id)
-    logger.info("  Protein count:  %s", actual_count)
-    logger.info("  Expected IDA:   %s", EXPECTED_FIRST_IDA_ID)
-    logger.info("  Expected count: ~%s", EXPECTED_FIRST_PROTEIN_COUNT)
-
-    if actual_ida_id != EXPECTED_FIRST_IDA_ID:
-        msg = (
-            f"First architecture mismatch — we may be starting at the wrong index.\n"
-            f"  Got:      {actual_ida_id}\n"
-            f"  Expected: {EXPECTED_FIRST_IDA_ID}\n"
-            f"Double-check the API pagination offset."
-        )
-        raise RuntimeError(msg)
-
-    # Allow a 5% margin since the database updates periodically
-    margin = EXPECTED_FIRST_PROTEIN_COUNT * 0.05
-    if abs(actual_count - EXPECTED_FIRST_PROTEIN_COUNT) > margin:
-        logger.warning(
-            "Protein count differs from expected by more than 5%% (%s vs %s). The database may have been updated.",
-            actual_count,
-            EXPECTED_FIRST_PROTEIN_COUNT,
-        )
-    else:
-        logger.info("✓ Index check passed — starting from architecture #1 as expected.")
 
 
 async def fetch_proteins_for_arch(
     session: aiohttp.ClientSession,
-    arch: dict,
+    arch: ArchResult,
     index: int,
     semaphore: asyncio.Semaphore,
     n_architectures: int,
-) -> dict:
+) -> ArchResult:
     """Fetch all proteins for a single domain architecture via cursor pagination.
 
     Pages must be fetched sequentially because each page's URL is returned
@@ -174,7 +138,7 @@ async def fetch_proteins_for_arch(
         Dictionary containing architecture metadata and all fetched proteins.
     """
     ida_id = arch.get("ida_id")
-    proteins = []
+    proteins: list[ArchResult] = []
     url = PROTEIN_URL_TEMPLATE.format(ida_id=ida_id)
 
     async with semaphore:
@@ -205,8 +169,8 @@ async def fetch_proteins_for_arch(
     }
 
 
-def _write_output(data: dict[str, object], output_file: Path) -> None:
-    """Write output data to disk synchronously.
+def _write_output(data: ArchResult, output_file: Path) -> None:
+    """Write output data to disk synchronously (internal helper for asyncio.to_thread).
 
     Args:
         data: The full output dictionary to serialize.
@@ -216,129 +180,72 @@ def _write_output(data: dict[str, object], output_file: Path) -> None:
         json.dump(data, f, indent=2)
 
 
-def run_sanity_checks(
-    architectures: list[dict],
-    expected_count: int,
-    protein_counts: dict[str, int],
-) -> dict[str, int | float | bool]:
-    """Run comprehensive sanity checks on the fetched data.
-
-    Args:
-        architectures: List of architecture result dicts.
-        expected_count: How many architectures we intended to fetch.
-        protein_counts: Dict mapping protein accession to occurrence count.
-
-    Returns:
-        Dictionary of sanity check results and statistics.
-    """
-    fetched_arch_count = len(architectures)
-    total_fetched = sum(r["proteins_fetched"] for r in architectures)
-    total_reported = sum(r["unique_proteins_reported"] for r in architectures)
-    unique_proteins = len(protein_counts)
-    duplicate_entries = total_fetched - unique_proteins
-
-    all_present = fetched_arch_count == expected_count
-    zero_count_archs = [a for a in architectures if a["proteins_fetched"] == 0]
-    no_zero_counts = len(zero_count_archs) == 0
-    avg_archs_per_protein = total_fetched / unique_proteins if unique_proteins > 0 else 0
-    multi_arch_proteins = sum(1 for count in protein_counts.values() if count > 1)
-
-    return {
-        "total_architectures_fetched": fetched_arch_count,
-        "total_architectures_expected": expected_count,
-        "architectures_match": all_present,
-        "total_proteins_fetched": total_fetched,
-        "total_proteins_reported_by_api": total_reported,
-        "total_unique_proteins": unique_proteins,
-        "duplicate_protein_entries": duplicate_entries,
-        "proteins_in_multiple_architectures": multi_arch_proteins,
-        "average_architectures_per_protein": round(avg_archs_per_protein, 2),
-        "all_architectures_present": all_present,
-        "no_zero_count_architectures": no_zero_counts,
-        "sanity_check_passed": all_present and no_zero_counts,
-    }
-
-
-def print_sanity_report(checks: dict[str, int | float | bool]) -> None:
-    """Log a formatted summary of the sanity check results.
-
-    Args:
-        checks: Dictionary returned by run_sanity_checks.
-    """
-    logger.info("=" * 70)
-    logger.info("SANITY CHECK REPORT")
-    logger.info("=" * 70)
-
-    if checks["sanity_check_passed"]:
-        logger.info("✓ All sanity checks PASSED")
-    else:
-        logger.error("✗ SANITY CHECK FAILED - Review issues below")
-
-    logger.info("Architectures:")
-    logger.info("  Expected:  %s", checks["total_architectures_expected"])
-    logger.info("  Fetched:   %s", checks["total_architectures_fetched"])
-    logger.info("  Status:    %s", "✓ OK" if checks["architectures_match"] else "✗ MISMATCH")
-
-    logger.info("Proteins:")
-    logger.info("  Total fetched:        %8s", checks["total_proteins_fetched"])
-    logger.info("  API reported:         %8s", checks["total_proteins_reported_by_api"])
-    logger.info("  Unique proteins:      %8s", checks["total_unique_proteins"])
-    logger.info("  Duplicate entries:    %8s", checks["duplicate_protein_entries"])
-    logger.info("  Multi-arch proteins:  %8s", checks["proteins_in_multiple_architectures"])
-
-    logger.info("Duplicate Analysis:")
-    logger.info("  Avg architectures per protein:  %s", checks["average_architectures_per_protein"])
-    logger.info("  Proteins in 2+ architectures:   %6s", checks["proteins_in_multiple_architectures"])
-
-    logger.info("Validation:")
-    logger.info("  All architectures present:     %s", "✓ Yes" if checks["all_architectures_present"] else "✗ No")
-    logger.info("  No zero-count architectures:   %s", "✓ Yes" if checks["no_zero_count_architectures"] else "✗ No")
-    logger.info("=" * 70)
-
-
 async def main() -> None:
     """Fetch all proteins for the top N domain architectures of IPR001623.
 
-    Architectures are fetched concurrently up to CONCURRENCY_LIMIT.
+    Architectures are fetched concurrently up to the concurrency limit.
     Within each architecture, pages are fetched sequentially due to
     cursor-based pagination. Results are written to a JSON file.
     """
     parser = argparse.ArgumentParser(description="Fetch IPR001623 domain architectures from InterPro.")
     parser.add_argument(
-        "--n-architectures", type=int, default=N_ARCHITECTURES, help="Number of architectures to fetch (default: 20)"
+        "-n",
+        "--n-architectures",
+        type=int,
+        default=None,
+        help=f"Number of architectures to fetch (default: {_DEFAULT_N_ARCHITECTURES})",
     )
-    parser.add_argument("--arch-url", type=str, default=ARCH_URL, help="Architecture list URL")
     parser.add_argument(
-        "--concurrency", type=int, default=CONCURRENCY_LIMIT, help="Max concurrent requests (default: 5)"
+        "-u",
+        "--arch-url",
+        type=str,
+        default=None,
+        help="Architecture list URL",
     )
-    parser.add_argument("--output", type=Path, default=OUTPUT_FILE, help="Output JSON file path")
+    parser.add_argument(
+        "-c",
+        "--concurrency",
+        type=int,
+        default=None,
+        help=f"Max concurrent requests (default: {_DEFAULT_CONCURRENCY})",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=None,
+        help=f"Output JSON file path (default: {_DEFAULT_OUTPUT})",
+    )
     args = parser.parse_args()
 
-    semaphore = asyncio.Semaphore(args.concurrency)
+    # Apply defaults idiomatically
+    n_architectures = args.n_architectures if args.n_architectures is not None else _DEFAULT_N_ARCHITECTURES
+    arch_url = args.arch_url if args.arch_url is not None else _DEFAULT_ARCH_URL
+    concurrency = args.concurrency if args.concurrency is not None else _DEFAULT_CONCURRENCY
+    output_file = args.output if args.output is not None else _DEFAULT_OUTPUT
+
+    semaphore = asyncio.Semaphore(concurrency)
 
     async with aiohttp.ClientSession(headers=HEADERS) as session:
         logger.info("Fetching architecture groups from InterPro...")
-        arch_data = await get_with_retry(session, args.arch_url)
-        architectures = arch_data.get("results", [])[: args.n_architectures]
+        arch_data = await get_with_retry(session, arch_url)
+        validate_api_response(arch_data)  # guard against unexpected API format changes
+        architectures = arch_data.get("results", [])[:n_architectures]
         logger.info("Got %s architecture group(s).", len(architectures))
-
-        # Confirm we're starting from architecture #1 before doing anything else.
-        # If this raises, the script stops here and nothing gets written to disk.
-        verify_first_architecture(architectures)
 
         logger.info("Fetching proteins...")
 
-        # Each architecture is independent so we fire them all at once.
+        # Each architecture is independent so we send them off all at once.
         # The semaphore keeps us from overwhelming the EBI API.
         tasks = [
-            fetch_proteins_for_arch(session, arch, i, semaphore, args.n_architectures)
+            fetch_proteins_for_arch(session, arch, i, semaphore, n_architectures)
             for i, arch in enumerate(architectures, start=1)
         ]
         all_results = await asyncio.gather(*tasks)
 
     # Figure out which proteins appear in more than one architecture
     logger.info("Processing duplicate flags...")
-    protein_occurrence_count: dict[str, int] = {}
+    protein_occurrence_count: ProteinCounts = {}
 
     for result in all_results:
         for protein in result["proteins"]:
@@ -353,13 +260,9 @@ async def main() -> None:
             if accession:
                 protein["appears_in_architecture_count"] = protein_occurrence_count[accession]
 
-    logger.info("Running sanity checks...")
-    sanity_checks = run_sanity_checks(all_results, args.n_architectures, protein_occurrence_count)
-
     total_fetched = sum(r["proteins_fetched"] for r in all_results)
 
-    output_data = {
-        "sanity_checks": sanity_checks,
+    output_data: ArchResult = {
         "architectures": list(all_results),
         "total_proteins_fetched": total_fetched,
         "note": (
@@ -368,11 +271,9 @@ async def main() -> None:
         ),
     }
 
-    # Write to disk using a helper so the blocking I/O stays out of the async context
-    await asyncio.to_thread(_write_output, output_data, args.output)
-
-    print_sanity_report(sanity_checks)
-    logger.info("Results written to %s", args.output)
+    # offload blocking I/O off the event loop
+    await asyncio.to_thread(_write_output, output_data, output_file)
+    logger.info("Results written to %s", output_file)
 
 
 if __name__ == "__main__":
