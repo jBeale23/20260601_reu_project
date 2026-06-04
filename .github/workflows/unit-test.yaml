@@ -12,5 +12,16 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v6
 
+      - name: Set Up Python # Setting up python first just in case make test ever has python dependencies
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt pytest pytest-asyncio
+
       - name: Run Make Test
         run: make test
+
+      - name: Run Unit Tests
+        run: make pytest

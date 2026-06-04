@@ -10,12 +10,12 @@ on:
 jobs:
   shellcheck:
     name: Lint (Shellcheck)
-    uses: ./.github/workflows/shfmt.yaml
+    uses: ./.github/workflows/shellcheck.yaml
 
   shfmt:
-    name: Format (shmft)
+    name: Format (shfmt)
     needs: shellcheck
-    uses: ./.github/workflows/shellcheck.yaml
+    uses: ./.github/workflows/shfmt.yaml
 
   ruff:
     name: Lint & Format (Ruff)

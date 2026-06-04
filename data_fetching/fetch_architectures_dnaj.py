@@ -1,6 +1,6 @@
 """Fetches all proteins for the first N domain architectures for InterPro entry IPR001623 (DnaJ/HSP40).
 
-NO deduplication, duplicate flagging:
+No deduplication, duplicate flagging:
 - Stores proteins exactly as they are fetched for each architecture
 - If a protein appears in multiple architectures, it will be stored multiple times
 - Each protein instance is flagged with how many architectures it appears in total
@@ -32,6 +32,7 @@ Output format::
     }
 """
 
+import argparse
 import asyncio
 import json
 import logging
@@ -103,7 +104,7 @@ async def get_with_retry(session: aiohttp.ClientSession, url: str) -> dict:
     raise RuntimeError(msg)
 
 
-def verify_first_architecture(architectures: list) -> None:
+def verify_first_architecture(architectures: list[dict]) -> None:
     """Confirm the API is returning architectures starting from #1, not #2 or later.
 
     Compares the first result against known values scraped from the InterPro
@@ -155,6 +156,7 @@ async def fetch_proteins_for_arch(
     arch: dict,
     index: int,
     semaphore: asyncio.Semaphore,
+    n_architectures: int,
 ) -> dict:
     """Fetch all proteins for a single domain architecture via cursor pagination.
 
@@ -166,6 +168,7 @@ async def fetch_proteins_for_arch(
         arch: Architecture metadata dict from the InterPro API.
         index: 1-based index of this architecture in the run (for display).
         semaphore: Shared semaphore limiting concurrent architecture fetches.
+        n_architectures: Total number of architectures being fetched (for display).
 
     Returns:
         Dictionary containing architecture metadata and all fetched proteins.
@@ -176,7 +179,7 @@ async def fetch_proteins_for_arch(
 
     async with semaphore:
         with tqdm(
-            desc=f"Arch {index}/{N_ARCHITECTURES} ({ida_id[:8]}...)",
+            desc=f"Arch {index}/{n_architectures} ({ida_id[:8]}...)",
             unit=" proteins",
             leave=False,
         ) as pbar:
@@ -202,21 +205,22 @@ async def fetch_proteins_for_arch(
     }
 
 
-def _write_output(data: dict) -> None:
+def _write_output(data: dict[str, object], output_file: Path) -> None:
     """Write output data to disk synchronously.
 
     Args:
         data: The full output dictionary to serialize.
+        output_file: Path to write the JSON output to.
     """
-    with OUTPUT_FILE.open("w") as f:
+    with output_file.open("w") as f:
         json.dump(data, f, indent=2)
 
 
 def run_sanity_checks(
-    architectures: list,
+    architectures: list[dict],
     expected_count: int,
-    protein_counts: dict,
-) -> dict:
+    protein_counts: dict[str, int],
+) -> dict[str, int | float | bool]:
     """Run comprehensive sanity checks on the fetched data.
 
     Args:
@@ -255,7 +259,7 @@ def run_sanity_checks(
     }
 
 
-def print_sanity_report(checks: dict) -> None:
+def print_sanity_report(checks: dict[str, int | float | bool]) -> None:
     """Log a formatted summary of the sanity check results.
 
     Args:
@@ -299,12 +303,23 @@ async def main() -> None:
     Within each architecture, pages are fetched sequentially due to
     cursor-based pagination. Results are written to a JSON file.
     """
-    semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
+    parser = argparse.ArgumentParser(description="Fetch IPR001623 domain architectures from InterPro.")
+    parser.add_argument(
+        "--n-architectures", type=int, default=N_ARCHITECTURES, help="Number of architectures to fetch (default: 20)"
+    )
+    parser.add_argument("--arch-url", type=str, default=ARCH_URL, help="Architecture list URL")
+    parser.add_argument(
+        "--concurrency", type=int, default=CONCURRENCY_LIMIT, help="Max concurrent requests (default: 5)"
+    )
+    parser.add_argument("--output", type=Path, default=OUTPUT_FILE, help="Output JSON file path")
+    args = parser.parse_args()
+
+    semaphore = asyncio.Semaphore(args.concurrency)
 
     async with aiohttp.ClientSession(headers=HEADERS) as session:
         logger.info("Fetching architecture groups from InterPro...")
-        arch_data = await get_with_retry(session, ARCH_URL)
-        architectures = arch_data.get("results", [])[:N_ARCHITECTURES]
+        arch_data = await get_with_retry(session, args.arch_url)
+        architectures = arch_data.get("results", [])[: args.n_architectures]
         logger.info("Got %s architecture group(s).", len(architectures))
 
         # Confirm we're starting from architecture #1 before doing anything else.
@@ -315,12 +330,15 @@ async def main() -> None:
 
         # Each architecture is independent so we fire them all at once.
         # The semaphore keeps us from overwhelming the EBI API.
-        tasks = [fetch_proteins_for_arch(session, arch, i, semaphore) for i, arch in enumerate(architectures, start=1)]
+        tasks = [
+            fetch_proteins_for_arch(session, arch, i, semaphore, args.n_architectures)
+            for i, arch in enumerate(architectures, start=1)
+        ]
         all_results = await asyncio.gather(*tasks)
 
     # Figure out which proteins appear in more than one architecture
     logger.info("Processing duplicate flags...")
-    protein_occurrence_count: dict = {}
+    protein_occurrence_count: dict[str, int] = {}
 
     for result in all_results:
         for protein in result["proteins"]:
@@ -336,7 +354,7 @@ async def main() -> None:
                 protein["appears_in_architecture_count"] = protein_occurrence_count[accession]
 
     logger.info("Running sanity checks...")
-    sanity_checks = run_sanity_checks(all_results, N_ARCHITECTURES, protein_occurrence_count)
+    sanity_checks = run_sanity_checks(all_results, args.n_architectures, protein_occurrence_count)
 
     total_fetched = sum(r["proteins_fetched"] for r in all_results)
 
@@ -345,16 +363,16 @@ async def main() -> None:
         "architectures": list(all_results),
         "total_proteins_fetched": total_fetched,
         "note": (
-            "NO deduplication - proteins may appear multiple times if present in "
+            "No deduplication - proteins may appear multiple times if present in "
             "multiple architectures. Use 'appears_in_architecture_count' to identify duplicates."
         ),
     }
 
     # Write to disk using a helper so the blocking I/O stays out of the async context
-    await asyncio.to_thread(_write_output, output_data)
+    await asyncio.to_thread(_write_output, output_data, args.output)
 
     print_sanity_report(sanity_checks)
-    logger.info("Results written to %s", OUTPUT_FILE)
+    logger.info("Results written to %s", args.output)
 
 
 if __name__ == "__main__":
