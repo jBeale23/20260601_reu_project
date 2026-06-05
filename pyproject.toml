@@ -37,3 +37,5 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 # Ignore unused imports in __init__.py files
 "__init__.py" = ["F401"]
+# assert is standard and expected in pytest
+"tests/*" = ["S101"]

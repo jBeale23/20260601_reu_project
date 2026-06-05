@@ -10,12 +10,12 @@ on:
 jobs:
   shellcheck:
     name: Lint (Shellcheck)
-    uses: ./.github/workflows/shfmt.yaml
+    uses: ./.github/workflows/shellcheck.yaml
 
   shfmt:
-    name: Format (shmft)
+    name: Format (shfmt)
     needs: shellcheck
-    uses: ./.github/workflows/shellcheck.yaml
+    uses: ./.github/workflows/shfmt.yaml
 
   ruff:
     name: Lint & Format (Ruff)
@@ -36,7 +36,7 @@ jobs:
       - ruff
       - unit_test
     steps:
-      - name: Determine Pipeline Succes
+      - name: Determine Pipeline Success
         uses: re-actors/alls-green@release/v1
         with:
           jobs: ${{ toJSON(needs) }}

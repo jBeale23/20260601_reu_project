@@ -1,7 +1,7 @@
 SHELL := /usr/bin/env sh
 TESTS := $(wildcard tests/*.sh)
 
-.PHONY: clean test
+.PHONY: clean test pytest
 
 clean:
 ifneq ($(wildcard tests/*.log),)
@@ -23,3 +23,6 @@ test:
 		printf "\n"; \
 	done; \
 	[ "$$FAILURE" -eq 0 ] || exit 1
+
+pytest:
+	pytest tests/ -v

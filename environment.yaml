@@ -1,0 +1,12 @@
+name: reu_project
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.12
+  - pip
+  - pip:
+    - aiohttp>=3.9
+    - tqdm>=4.66
+    - pytest>=8.0
+    - pytest-asyncio>=0.23

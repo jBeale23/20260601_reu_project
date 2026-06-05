@@ -17,8 +17,8 @@ repos:
     -   id: shellcheck
         args: ["--severity=warning", "--color=always"]
 - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.15
-    hooks:
+  rev: v0.15.15
+  hooks:
     -   id: ruff-check
         args: [ --fix ]
     -   id: ruff-format
