@@ -24,6 +24,7 @@ ignore = [
 	"E114",   # indentation-with-invalid-multiple-comment
 	"E117",   # over-indented
 	"E501",   # line-too-long
+	"EXE001", # shebang-not-executable — files are modules, not standalone scripts
 	"Q000",   # bad-quotes-inline-string
 	"Q001",   # bad-quotes-multiline-string
 	"Q002",   # bad-quotes-docstring
