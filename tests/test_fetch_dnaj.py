@@ -1,5 +1,8 @@
+#!/usr/bin/env python3
+
 """Unit tests for fetch_architectures_dnaj."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -319,3 +322,117 @@ async def test_get_with_retry_503_retries() -> None:
         pytest.raises(RuntimeError, match="Still failing"),
     ):
         await m.get_with_retry(mock_session, "https://example.com")
+
+
+# ---------------------------------------------------------------------------
+# fetch_proteins_for_arch
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fetch_proteins_for_arch_single_page() -> None:
+    """fetch_proteins_for_arch collects all proteins from a single-page response."""
+    arch = {"ida_id": "abc12345", "ida": "PF00226:IPR001623", "unique_proteins": 2}
+    page = {
+        "count": 2,
+        "results": [{"metadata": {"accession": "P1"}}, {"metadata": {"accession": "P2"}}],
+        "next": None,
+    }
+
+    mock_resp = MagicMock()
+    mock_resp.status = 200
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json = AsyncMock(return_value=page)
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+    mock_session = MagicMock()
+    mock_session.get = MagicMock(return_value=mock_resp)
+
+    semaphore = asyncio.Semaphore(1)
+    result = await m.fetch_proteins_for_arch(mock_session, arch, 1, semaphore, 1)
+    assert result["proteins_fetched"] == 2
+    assert len(result["proteins"]) == 2
+    assert result["ida_id"] == "abc12345"
+
+
+@pytest.mark.asyncio
+async def test_fetch_proteins_for_arch_multi_page() -> None:
+    """fetch_proteins_for_arch follows pagination across multiple pages."""
+    arch = {"ida_id": "abc12345", "ida": "PF00226:IPR001623", "unique_proteins": 4}
+    page1 = {
+        "count": 4,
+        "results": [{"metadata": {"accession": "P1"}}, {"metadata": {"accession": "P2"}}],
+        "next": "https://example.com/page2",
+    }
+    page2 = {
+        "count": 4,
+        "results": [{"metadata": {"accession": "P3"}}, {"metadata": {"accession": "P4"}}],
+        "next": None,
+    }
+
+    mock_resp = MagicMock()
+    mock_resp.status = 200
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json = AsyncMock(side_effect=[page1, page2])
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+    mock_session = MagicMock()
+    mock_session.get = MagicMock(return_value=mock_resp)
+
+    semaphore = asyncio.Semaphore(1)
+    result = await m.fetch_proteins_for_arch(mock_session, arch, 1, semaphore, 1)
+    assert result["proteins_fetched"] == 4
+    assert len(result["proteins"]) == 4
+
+
+@pytest.mark.asyncio
+async def test_fetch_proteins_for_arch_empty_results() -> None:
+    """fetch_proteins_for_arch handles an empty result set without crashing."""
+    arch = {"ida_id": "abc12345", "ida": "PF00226:IPR001623", "unique_proteins": 0}
+    page = {"count": 0, "results": [], "next": None}
+
+    mock_resp = MagicMock()
+    mock_resp.status = 200
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json = AsyncMock(return_value=page)
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+    mock_session = MagicMock()
+    mock_session.get = MagicMock(return_value=mock_resp)
+
+    semaphore = asyncio.Semaphore(1)
+    result = await m.fetch_proteins_for_arch(mock_session, arch, 1, semaphore, 1)
+    assert result["proteins_fetched"] == 0
+    assert result["proteins"] == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_proteins_for_arch_retry_exhausted_returns_partial() -> None:
+    """fetch_proteins_for_arch returns partial results when retries are exhausted mid-pagination."""
+    arch = {"ida_id": "abc12345", "ida": "PF00226:IPR001623", "unique_proteins": 4}
+    page1 = {
+        "count": 4,
+        "results": [{"metadata": {"accession": "P1"}}, {"metadata": {"accession": "P2"}}],
+        "next": "https://example.com/page2",
+    }
+
+    call_count = 0
+
+    async def fail_on_second(*_args: object, **_kwargs: object) -> m.ApiResponse:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return page1
+        msg = "Still failing after 5 retries: https://example.com/page2"
+        raise RuntimeError(msg)
+
+    with patch("data_fetching.fetch_architectures_dnaj.get_with_retry", side_effect=fail_on_second):
+        semaphore = asyncio.Semaphore(1)
+        result = await m.fetch_proteins_for_arch(MagicMock(), arch, 1, semaphore, 1)
+
+    assert result["proteins_fetched"] == 2
+    assert len(result["proteins"]) == 2
+    assert result["ida_id"] == "abc12345"

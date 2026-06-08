@@ -1,1 +1,1 @@
-"""Data fetching scripts for InterPro domain architecture analysis."""
+"""Data fetching scripts for InterPro protein and domain architecture analysis."""

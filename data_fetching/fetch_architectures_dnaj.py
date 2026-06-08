@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """Fetches all proteins for the first N domain architectures for InterPro entry IPR001623 (DnaJ/HSP40).
 
 No deduplication, duplicate flagging:
@@ -40,10 +42,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- Type aliases ---
-type ArchResult = dict[str, object]
+# Raw JSON object returned by the InterPro API — keys are strings, values are
+# JSON-native scalars or nested containers.
+type ApiResponse = dict[str, str | int | float | bool | list | dict | None]
+
+# Per-architecture result assembled by this script, written to the output file.
+type ArchResult = dict[str, str | int | list[ApiResponse]]
+
+# Tracks how many architectures each protein accession appears in.
 type ProteinCounts = dict[str, int]
 
-# --- Constants (used as defaults in main) ---
+# --- Constants ---
 _DEFAULT_ARCH_URL = "https://www.ebi.ac.uk/interpro/api/entry/InterPro/IPR001623/?ida&page_size=20&format=json"
 _DEFAULT_N_ARCHITECTURES = 20
 _DEFAULT_CONCURRENCY = 5
@@ -64,7 +73,7 @@ RATE_LIMIT_STATUSES = {408, 429, 503}
 EXPIRED_CURSOR_STATUS = 404
 
 
-async def get_with_retry(session: aiohttp.ClientSession, url: str) -> ArchResult:
+async def get_with_retry(session: aiohttp.ClientSession, url: str) -> ApiResponse:
     """Fetch a URL with exponential backoff on rate limits and expired cursors.
 
     Args:
@@ -97,7 +106,7 @@ async def get_with_retry(session: aiohttp.ClientSession, url: str) -> ArchResult
     raise RuntimeError(msg)
 
 
-def validate_api_response(data: ArchResult) -> None:
+def validate_api_response(data: ApiResponse) -> None:
     """Raise if the API response is missing expected top-level keys.
 
     Acts as a lightweight runtime guard against unexpected API format changes.
@@ -117,7 +126,7 @@ def validate_api_response(data: ArchResult) -> None:
 
 async def fetch_proteins_for_arch(
     session: aiohttp.ClientSession,
-    arch: ArchResult,
+    arch: ApiResponse,
     index: int,
     semaphore: asyncio.Semaphore,
     n_architectures: int,
@@ -137,9 +146,9 @@ async def fetch_proteins_for_arch(
     Returns:
         Dictionary containing architecture metadata and all fetched proteins.
     """
-    ida_id = arch.get("ida_id")
-    proteins: list[ArchResult] = []
-    url = PROTEIN_URL_TEMPLATE.format(ida_id=ida_id)
+    ida_id: str = arch.get("ida_id", "")
+    proteins: list[ApiResponse] = []
+    url: str | None = PROTEIN_URL_TEMPLATE.format(ida_id=ida_id)
 
     async with semaphore:
         with tqdm(
@@ -155,13 +164,13 @@ async def fetch_proteins_for_arch(
                     # than crashing the entire run and losing all other results.
                     logger.exception("Skipping arch %s (%s) after repeated failures", index, ida_id)
                     break
-                batch = data.get("results", [])
+                batch: list[ApiResponse] = data.get("results", [])
                 proteins.extend(batch)
                 pbar.update(len(batch))
                 url = data.get("next")
 
     return {
-        "ida": arch.get("ida"),
+        "ida": arch.get("ida", ""),
         "ida_id": ida_id,
         "unique_proteins_reported": arch.get("unique_proteins", 0),
         "proteins_fetched": len(proteins),
@@ -230,7 +239,7 @@ async def main() -> None:
         logger.info("Fetching architecture groups from InterPro...")
         arch_data = await get_with_retry(session, arch_url)
         validate_api_response(arch_data)  # guard against unexpected API format changes
-        architectures = arch_data.get("results", [])[:n_architectures]
+        architectures: list[ApiResponse] = arch_data.get("results", [])[:n_architectures]
         logger.info("Got %s architecture group(s).", len(architectures))
 
         logger.info("Fetching proteins...")
@@ -241,7 +250,7 @@ async def main() -> None:
             fetch_proteins_for_arch(session, arch, i, semaphore, n_architectures)
             for i, arch in enumerate(architectures, start=1)
         ]
-        all_results = await asyncio.gather(*tasks)
+        all_results: tuple[ArchResult, ...] = await asyncio.gather(*tasks)
 
     # Figure out which proteins appear in more than one architecture
     logger.info("Processing duplicate flags...")
@@ -249,7 +258,7 @@ async def main() -> None:
 
     for result in all_results:
         for protein in result["proteins"]:
-            accession = protein.get("metadata", {}).get("accession")
+            accession: str | None = protein.get("metadata", {}).get("accession")
             if accession:
                 protein_occurrence_count[accession] = protein_occurrence_count.get(accession, 0) + 1
 
