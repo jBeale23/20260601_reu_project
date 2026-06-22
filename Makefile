@@ -1,7 +1,10 @@
 SHELL := /usr/bin/env sh
 TESTS := $(wildcard tests/*.sh)
 
-.PHONY: clean test pytest
+.PHONY: clean install test pytest
+
+install:
+	pip install -e ".[dev]"
 
 clean:
 ifneq ($(wildcard tests/*.log),)

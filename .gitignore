@@ -1,5 +1,6 @@
 # Python
 __pycache__/
+*.egg-info/
 *.pyc
 *.pyo
 *.pyd
@@ -15,3 +16,6 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# json fetched files
+*.json

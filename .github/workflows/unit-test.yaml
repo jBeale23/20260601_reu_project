@@ -18,7 +18,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install Dependencies
-        run: pip install -r requirements.txt
+        run: pip install -e ".[dev]"
 
       - name: Run Make Test
         run: make test
