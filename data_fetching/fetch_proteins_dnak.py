@@ -1,11 +1,13 @@
-#!/usr/bin/env python3
-
-
 """Fetches all proteins for InterPro entry IPR012725 (DnaK).
 
 This entry has no domain architecture groups. The script retrieves all proteins
 that match the entry directly using the InterPro protein API.
 No deduplication is performed: proteins are stored exactly as returned by the API.
+
+If the cursor chain times out mid-fetch, progress is saved to a checkpoint
+file and the script exits cleanly. Re-running the script will resume from
+the last successful cursor rather than starting over from the beginning.
+Once the fetch completes successfully the checkpoint file is deleted.
 
 Output format::
 
@@ -14,55 +16,50 @@ Output format::
         "proteins_reported": 100000,
         "total_proteins_fetched": 100000,
         "proteins": [...],
-        "note": "No deduplication - proteins are stored exactly as returned by the API.",
+        "note": "...",
     }
 """
 
 import argparse
 import asyncio
-import json
 import logging
-import sys
 from pathlib import Path
 
 import aiohttp
 from tqdm import tqdm
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
+from data_fetching.fetch_types import ApiResponse, ProteinResult
+from data_fetching.utils import (
+    INTERPRO_HEADERS,
+    check_count_anomaly,
+    checkpoint_exists,
+    configure_logging,
+    delete_checkpoint,
+    get_with_retry,
+    load_checkpoint,
+    save_checkpoint,
+    validate_api_response,
+    write_output,
 )
+
+configure_logging()
 logger = logging.getLogger(__name__)
 
-# --- Type aliases ---
-# Raw JSON object returned by the InterPro API — keys are strings, values are
-# JSON-native scalars or nested containers.
-type ApiResponse = dict[str, str | int | float | bool | list | dict | None]
-
-# Assembled output dict produced by this script, written to the output file.
-type ProteinResult = dict[str, str | int | list[ApiResponse]]
-
-# --- Constants (used as defaults in main) ---
 ENTRY_ACCESSION = "IPR012725"
 
 _DEFAULT_PAGE_SIZE = 200
 _DEFAULT_OUTPUT = Path("ipr012725_proteins.json")
+_DEFAULT_CHECKPOINT = Path("ipr012725_checkpoint.json")
 _DEFAULT_MAX_PERCENT = 0.01
 _DEFAULT_MAX_ABS = 100
-
-HEADERS = {"User-Agent": "research-script/1.0 (tmarena1@jh.edu)"}
-
-# HTTP status codes that warrant a retry
-RATE_LIMIT_STATUSES = {408, 429, 503}
-EXPIRED_CURSOR_STATUS = 404
+_REQUEST_TIMEOUT = 300
 
 
 def make_protein_url(entry_accession: str, page_size: int) -> str:
-    """Build the InterPro API URL for fetching proteins by entry accession.
+    """Build the first-page InterPro API URL for fetching proteins by entry accession.
 
     Args:
-        entry_accession: The InterPro entry accession (in this case, IPR012725).
+        entry_accession: The InterPro entry accession (e.g. IPR012725).
         page_size: Number of results to request per page.
 
     Returns:
@@ -74,163 +71,116 @@ def make_protein_url(entry_accession: str, page_size: int) -> str:
     )
 
 
-async def get_with_retry(session: aiohttp.ClientSession, url: str) -> ApiResponse:
-    """Fetch a URL with exponential backoff on rate limits and expired cursors.
-
-    Args:
-        session: The aiohttp client session to use.
-        url: The URL to fetch.
-
-    Returns:
-        Parsed JSON response as a dictionary.
-
-    Raises:
-        RuntimeError: If all 5 retry attempts are exhausted.
-    """
-    for attempt in range(5):
-        async with session.get(url) as resp:
-            if resp.status in RATE_LIMIT_STATUSES:
-                wait = min(60 * (2**attempt), 300)
-                logger.warning("Rate limited (%s), waiting %ss before retrying...", resp.status, wait)
-                await asyncio.sleep(wait)
-                continue
-            if resp.status == EXPIRED_CURSOR_STATUS:
-                # Cursors can expire mid-pagination on the InterPro API.
-                # A short wait usually resolves it.
-                wait = min(10 * (2**attempt), 60)
-                logger.warning("Cursor expired (404), attempt %s/5, retrying in %ss...", attempt + 1, wait)
-                await asyncio.sleep(wait)
-                continue
-            resp.raise_for_status()
-            return await resp.json()
-    msg = f"Still failing after 5 retries: {url}"
-    raise RuntimeError(msg)
-
-
-def validate_api_response(data: ApiResponse) -> None:
-    """Raise if the API response is missing expected top-level keys.
-
-    Acts as a lightweight runtime guard against unexpected API format changes.
-
-    Args:
-        data: Parsed JSON response from the InterPro API.
-
-    Raises:
-        RuntimeError: If any required keys are absent from the response.
-    """
-    required = {"results", "next", "count"}
-    missing = required - data.keys()
-    if missing:
-        msg = f"Unexpected API response format — missing keys: {missing}"
-        raise RuntimeError(msg)
-
-
-def check_count_anomaly(
-    reported: int,
-    fetched: int,
-    max_abs: int = _DEFAULT_MAX_ABS,
-    max_percent: float = _DEFAULT_MAX_PERCENT,
-) -> None:
-    """Log a warning if the fetched protein count diverges too far from reported.
-
-    Both thresholds must be exceeded simultaneously to trigger the warning,
-    to avoid false positives on very large or very small datasets.
-
-    Args:
-        reported: Protein count as reported by the API.
-        fetched: Protein count actually retrieved.
-        max_abs: Maximum allowed absolute difference before warning.
-        max_percent: Maximum allowed fractional difference before warning (e.g. 0.01 = 1%).
-    """
-    if reported <= 0:
-        return
-    abs_diff = abs(reported - fetched)
-    pct_diff = abs_diff / reported
-    if abs_diff > max_abs and pct_diff > max_percent:
-        logger.warning(
-            "Count anomaly: reported=%s fetched=%s (Δ%s, %.1f%%)",
-            reported,
-            fetched,
-            abs_diff,
-            pct_diff * 100,
-        )
-
-
 async def fetch_all_proteins(
     session: aiohttp.ClientSession,
     url: str,
     first_page: ApiResponse | None = None,
+    checkpoint_file: Path | None = None,
 ) -> ProteinResult:
-    """Fetch all proteins for the entry via cursor-based pagination.
+    """Fetch all proteins via sequential cursor pagination with checkpointing.
 
-    Pages must be fetched sequentially because each page's URL is returned
-    by the previous response. If a pre-fetched first page is provided, it is
-    used directly without making an additional request, avoiding a redundant
-    API call. If retries are exhausted mid-pagination, the partial results
-    collected so far are returned rather than crashing the entire run.
+    If a checkpoint file exists from a previous interrupted run, pagination
+    resumes from the last saved cursor rather than starting over. Progress
+    is saved to the checkpoint file whenever pagination is interrupted so
+    that re-running the script picks up exactly where it left off. The
+    checkpoint file is deleted once the fetch completes successfully.
 
     Args:
         session: The aiohttp client session to use.
-        url: The initial API URL to fetch from.
-        first_page: Optional pre-fetched first page to reuse.
+        url: The first-page URL to start from (used only on a fresh run).
+        first_page: Optional pre-fetched first page to reuse (fresh run only).
+        checkpoint_file: Path to read/write the checkpoint JSON, or None to
+            disable checkpointing.
 
     Returns:
-        Dictionary containing entry accession, reported count, fetched count,
-        and the full list of protein results.
+        Dictionary with entry accession, reported count, fetched count,
+        all protein results, and ``is_partial`` flag.
     """
     proteins: list[ApiResponse] = []
     total_count: int | None = None
+    is_partial = False
+    next_url: str | None = None
 
-    with tqdm(desc="Fetching proteins", unit=" proteins", leave=False) as pbar:
-        while url:
+    if checkpoint_file and await asyncio.to_thread(checkpoint_exists, checkpoint_file):
+        checkpoint = await asyncio.to_thread(load_checkpoint, checkpoint_file)
+        proteins = checkpoint.get("proteins", [])
+        total_count = checkpoint.get("proteins_reported")
+        next_url = checkpoint.get("next_url")
+        logger.info(
+            "Resuming from checkpoint: %s proteins collected so far, resuming at cursor %s",
+            len(proteins),
+            next_url,
+        )
+
+    if next_url is None:
+        if first_page is None:
             try:
-                data = first_page if first_page is not None else await get_with_retry(session, url)
+                first_page = await get_with_retry(session, url)
             except RuntimeError:
-                # If retries are exhausted mid-pagination, return partial results
-                # rather than crashing and losing everything collected so far.
-                logger.exception(
-                    "Retries exhausted mid-pagination, returning %s proteins collected so far",
+                logger.exception("Retries exhausted while fetching the first protein page.")
+                return {
+                    "entry_accession": ENTRY_ACCESSION,
+                    "proteins_reported": None,
+                    "proteins_fetched": 0,
+                    "is_partial": True,
+                    "proteins": [],
+                }
+        validate_api_response(first_page)
+        proteins.extend(first_page.get("results", []))
+        total_count = first_page.get("count")
+        next_url = first_page.get("next")
+
+    with tqdm(
+        desc="Fetching proteins",
+        total=total_count,
+        initial=len(proteins),
+        unit=" proteins",
+        leave=False,
+    ) as pbar:
+        while next_url:
+            try:
+                data = await get_with_retry(session, next_url)
+            except RuntimeError:
+                logger.warning(
+                    "Fetch interrupted at %s proteins — saving checkpoint to %s. "
+                    "Re-run the script to resume from this point.",
                     len(proteins),
+                    checkpoint_file,
                 )
+                if checkpoint_file:
+                    await asyncio.to_thread(
+                        save_checkpoint,
+                        checkpoint_file,
+                        {
+                            "proteins_reported": total_count,
+                            "next_url": next_url,
+                            "proteins": proteins,
+                        },
+                    )
+                    logger.info("Checkpoint saved to %s.", checkpoint_file)
+                is_partial = True
                 break
-            first_page = None  # only use the pre-fetched page once
-            if total_count is None:
-                total_count = data.get("count")
-                if total_count is not None:
-                    pbar.total = total_count
-                    pbar.refresh()
+            validate_api_response(data)
             batch: list[ApiResponse] = data.get("results", [])
             proteins.extend(batch)
             pbar.update(len(batch))
-            url = data.get("next")
+            next_url = data.get("next")
+
+    if not is_partial and checkpoint_file and await asyncio.to_thread(checkpoint_exists, checkpoint_file):
+        await asyncio.to_thread(delete_checkpoint, checkpoint_file)
+        logger.info("Fetch complete — checkpoint file deleted.")
 
     return {
         "entry_accession": ENTRY_ACCESSION,
         "proteins_reported": total_count,
         "proteins_fetched": len(proteins),
+        "is_partial": is_partial,
         "proteins": proteins,
     }
 
 
-def _write_output(data: ProteinResult, output_file: Path) -> None:
-    """Write output data to disk synchronously (internal helper for asyncio.to_thread).
-
-    Args:
-        data: The full output dictionary to serialize.
-        output_file: Path to write the JSON output to.
-    """
-    with output_file.open("w") as f:
-        json.dump(data, f, indent=2)
-
-
 async def main() -> None:
-    """Fetch all proteins for InterPro entry IPR012725 (DnaK).
-
-    Proteins are fetched sequentially via cursor-based pagination.
-    A count anomaly check is performed after fetching to warn if the
-    number of proteins retrieved diverges significantly from what the
-    API reported. Results are written to a JSON file.
-    """
+    """Fetch all proteins for InterPro entry IPR012725 (DnaK)."""
     parser = argparse.ArgumentParser(description="Fetch proteins for IPR012725 (DnaK).")
     parser.add_argument(
         "-p",
@@ -240,51 +190,69 @@ async def main() -> None:
         help=f"Page size to request from the API (default: {_DEFAULT_PAGE_SIZE})",
     )
     parser.add_argument(
-        "-o",
-        "--output",
-        type=Path,
-        default=None,
-        help=f"Output JSON file path (default: {_DEFAULT_OUTPUT})",
+        "-o", "--output", type=Path, default=None, help=f"Output JSON file path (default: {_DEFAULT_OUTPUT})"
+    )
+    parser.add_argument(
+        "-k", "--checkpoint", type=Path, default=None, help=f"Checkpoint file path (default: {_DEFAULT_CHECKPOINT})"
     )
     parser.add_argument(
         "-m",
         "--max-percent",
         type=float,
         default=None,
-        help=f"Maximum fractional difference allowed before warning (default: {_DEFAULT_MAX_PERCENT})",
+        help=f"Percent difference threshold for soft notification (default: {_DEFAULT_MAX_PERCENT})",
     )
     parser.add_argument(
         "-a",
         "--max-abs",
         type=int,
         default=None,
-        help=f"Maximum absolute difference allowed before warning (default: {_DEFAULT_MAX_ABS})",
+        help=f"Absolute difference threshold for hard warning (default: {_DEFAULT_MAX_ABS})",
+    )
+    parser.add_argument(
+        "-t", "--timeout", type=int, default=None, help=f"Request timeout in seconds (default: {_REQUEST_TIMEOUT})"
     )
     args = parser.parse_args()
 
-    # Apply defaults idiomatically
     page_size = args.page_size if args.page_size is not None else _DEFAULT_PAGE_SIZE
     output_file = args.output if args.output is not None else _DEFAULT_OUTPUT
+    checkpoint_file = args.checkpoint if args.checkpoint is not None else _DEFAULT_CHECKPOINT
     max_percent = args.max_percent if args.max_percent is not None else _DEFAULT_MAX_PERCENT
     max_abs = args.max_abs if args.max_abs is not None else _DEFAULT_MAX_ABS
+    timeout = args.timeout if args.timeout is not None else _REQUEST_TIMEOUT
 
     protein_url = make_protein_url(ENTRY_ACCESSION, page_size)
+    session_timeout = aiohttp.ClientTimeout(total=timeout, sock_read=timeout)
 
-    async with aiohttp.ClientSession(headers=HEADERS) as session:
+    async with aiohttp.ClientSession(headers=INTERPRO_HEADERS, timeout=session_timeout) as session:
         logger.info("Fetching proteins for InterPro entry %s...", ENTRY_ACCESSION)
-        first_page = await get_with_retry(session, protein_url)
-        validate_api_response(first_page)  # guard against unexpected API format changes
-        protein_data = await fetch_all_proteins(session, protein_url, first_page=first_page)
+
+        first_page: ApiResponse | None = None
+        if not await asyncio.to_thread(checkpoint_exists, checkpoint_file):
+            first_page = await get_with_retry(session, protein_url)
+            validate_api_response(first_page)
+
+        protein_data = await fetch_all_proteins(
+            session,
+            protein_url,
+            first_page=first_page,
+            checkpoint_file=checkpoint_file,
+        )
 
     reported = protein_data.get("proteins_reported") or 0
     fetched = protein_data.get("proteins_fetched", 0)
     logger.info("Proteins reported: %s | Proteins fetched: %s", reported, fetched)
+
+    if protein_data.get("is_partial"):
+        logger.warning("Output is incomplete — re-run the script to resume from the checkpoint.")
+
     check_count_anomaly(reported, fetched, max_abs=max_abs, max_percent=max_percent)
 
     output_data: ProteinResult = {
         "entry_accession": ENTRY_ACCESSION,
         "proteins_reported": reported,
         "total_proteins_fetched": fetched,
+        "is_partial": protein_data.get("is_partial", False),
         "proteins": protein_data.get("proteins", []),
         "note": (
             "No deduplication - proteins are stored exactly as returned by the API. "
@@ -292,10 +260,14 @@ async def main() -> None:
         ),
     }
 
-    # offload blocking I/O off the event loop
-    await asyncio.to_thread(_write_output, output_data, output_file)
+    await asyncio.to_thread(write_output, output_data, output_file)
     logger.info("Results written to %s", output_file)
 
 
-if __name__ == "__main__":
+def cli() -> None:
+    """Console script entry point for fetch-proteins-dnak."""
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    cli()

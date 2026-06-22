@@ -1,1 +1,1 @@
-"""Tests for the data_fetching packages."""
+"""Tests for the data_fetching package."""
