@@ -1,4 +1,4 @@
-# REU Data Fetching
+# JU BioREU JDP Classification Project
 
 Async Python tools for fetching protein data from the [InterPro](https://www.ebi.ac.uk/interpro/) REST API. The project includes two fetch scripts:
 
@@ -7,7 +7,7 @@ Async Python tools for fetching protein data from the [InterPro](https://www.ebi
 | `fetch-architectures-dnaj` | IPR001623 (DnaJ/HSP40) | Fetches proteins for the top *N* domain architectures |
 | `fetch-proteins-dnak` | IPR012725 (DnaK) | Fetches all proteins for a single entry (no architecture groups) |
 
-Both scripts write JSON output to disk. No deduplication is performed — proteins are stored exactly as returned by the API.
+Both scripts write JSON output to disk. No deduplication is performed, so proteins are stored exactly as returned by the API.
 
 ## Requirements
 
