@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Extract unique UniProt accessions from InterPro fetch JSON output."""
 
 from __future__ import annotations
