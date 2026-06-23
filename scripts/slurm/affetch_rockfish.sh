@@ -18,19 +18,16 @@
 # https://github.com/mansanlab/alphafoldfetch
 #
 # Setup (once on Rockfish):
-#   conda create -n affetch python=3.12 -y
+#   conda env create -f scripts/slurm/conda_env.yaml
 #   conda activate affetch
-#   pip install AlphaFoldFetch
 #
 # Prepare inputs:
 #   fetch-proteins-dnak -o ipr012725_proteins.json
 #   python scripts/extract_uniprot_ids.py ipr012725_proteins.json -o accessions.txt
 #   cp accessions.txt "${WK_DIR}/incomplete_accessions.txt"
 #
-# Submit from the project checkout (set array upper bound to pending accession count):
-#   cd "${PROJECT_DIR}"
-#   N=$(wc -l < "${WK_DIR}/incomplete_accessions.txt")
-#   sbatch --array=1-"${N}"%128 scripts/slurm/affetch_rockfish.sh
+# Submit (array bounds set automatically from pending accession count):
+#   bash scripts/slurm/submit_affetch_rockfish.sh
 
 WK_DIR="${HOME}/scr4_sfried3/alphafoldfetch"
 INPUT_FILE="${WK_DIR}/incomplete_accessions.txt"
@@ -46,12 +43,14 @@ CONDA_ENV="${CONDA_ENV:-affetch}"
 ml anaconda3/2024.02-1
 conda activate "${CONDA_ENV}"
 
+[[ -f ${INPUT_FILE} ]] || {
+	printf "Input file not found: %s\n" "${INPUT_FILE}" 1>&2
+	printf "Copy accessions.txt to %s before submitting the array job.\n" "${INPUT_FILE}" 1>&2
+	exit 1
+}
+
 mkdir -p "${WK_DIR}" "${OUTPUT_DIR}"
 touch "${COMPLETION_LOG}"
-if [[ ! -f ${INPUT_FILE} ]]; then
-	echo "WARNING: ${INPUT_FILE} not found; creating an empty input file." >&2
-	: > "${INPUT_FILE}"
-fi
 
 cd "${WK_DIR}" || exit
 
