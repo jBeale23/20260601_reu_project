@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from scripts.extract_uniprot_ids import extract_accessions, main
 
 
@@ -51,3 +53,21 @@ def test_extract_accessions_cli(tmp_path: Path) -> None:
         main()
 
     assert out_file.read_text() == "P9\n"
+
+
+def test_extract_accessions_empty_input() -> None:
+    """Empty fetch output yields no accessions."""
+    assert extract_accessions({}) == []
+
+
+def test_extract_accessions_cli_missing_file(tmp_path: Path) -> None:
+    """CLI exits with an error when the JSON file does not exist."""
+    missing = tmp_path / "missing.json"
+
+    with (
+        patch.object(sys, "argv", ["extract_uniprot_ids.py", str(missing)]),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        main()
+
+    assert exc_info.value.code == 2
