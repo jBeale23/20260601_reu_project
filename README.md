@@ -10,7 +10,7 @@ Sometimes proteins fold incorrectly, partly unfold, or clump together. **Chapero
 
 **Hsp70** is one of the most important chaperones. It works like a reusable clamp: it grabs exposed sticky parts of proteins, uses ATP energy, and releases them so they get another chance to fold correctly ([FEBS review](https://febs.onlinelibrary.wiley.com/doi/10.1111/febs.70359)).
 
-**J-domain proteins (JDPs)** — Hsp40 is a familiar example — tell Hsp70 where to act. Hsp70 is the powerhouse; JDPs provide much of the targeting logic ([bioRxiv](https://www.biorxiv.org/content/10.1101/2024.10.15.618527v1.full.pdf)). JDPs recognize misfolded, unfolded, or aggregating proteins and recruit **ATP-bound Hsp70**. In the ATP-bound state, Hsp70’s **nucleotide-binding domain (NBD)** and **substrate-binding domain (SBD)** are tightly coupled; contact with the J-domain stimulates ATP hydrolysis so Hsp70 can grip and release client proteins in a controlled cycle ([FEBS review](https://febs.onlinelibrary.wiley.com/doi/10.1111/febs.70359)).
+**J-domain proteins (JDPs)**, of which Hsp40 is a famous example, tell Hsp70 where to act. Hsp70 is the powerhouse; JDPs provide much of the targeting logic ([bioRxiv](https://www.biorxiv.org/content/10.1101/2024.10.15.618527v1.full.pdf)). JDPs recognize misfolded, unfolded, or aggregating proteins and recruit **ATP-bound Hsp70**. In the ATP-bound state, Hsp70’s **nucleotide-binding domain (NBD)** and **substrate-binding domain (SBD)** are tightly coupled; contact with the J-domain stimulates ATP hydrolysis so Hsp70 can grip and release client proteins in a controlled cycle ([FEBS review](https://febs.onlinelibrary.wiley.com/doi/10.1111/febs.70359)).
 
 ## Acronym guide
 
@@ -41,7 +41,7 @@ Key references for this section: [FEBS review](https://febs.onlinelibrary.wiley.
 
 ## What a domain is
 
-A **domain** is a reusable part of a protein — like a LEGO block with a specific shape and job.
+A **domain** is a reusable part of a protein, think of it like a LEGO block with a specific shape and job.
 
 A protein’s **domain architecture** is which domains it has and in what order. For JDPs this matters because the J-domain activates Hsp70, while other domains often decide which substrates the JDP recognizes, where it localizes, and which pathway it joins ([bioRxiv](https://www.biorxiv.org/content/10.1101/2024.10.15.618527v1.full.pdf)).
 
@@ -75,7 +75,7 @@ For each protein, the classifier should eventually answer:
 - Does it resemble class A, class B, class C, or a more specific subclass?
 - Is the classification high-confidence or uncertain?
 
-A useful output goes beyond “class C” — for example: “High-confidence membrane-associated class C JDP with an HPD-containing J-domain and a transmembrane segment, likely recruiting Hsp70 to a membrane-localized process” ([FEBS review](https://febs.onlinelibrary.wiley.com/doi/10.1111/febs.70359)).
+A useful output goes beyond “class C”. For example: “High-confidence membrane-associated class C JDP with an HPD-containing J-domain and a transmembrane segment, likely recruiting Hsp70 to a membrane-localized process” ([FEBS review](https://febs.onlinelibrary.wiley.com/doi/10.1111/febs.70359)).
 
 JDPs customize where and how Hsp70 acts: newly made proteins, damaged proteins, aggregates, membranes, organelles, ribosomes, or degradation pathways ([PubMed](https://pubmed.ncbi.nlm.nih.gov/35729039/)).
 
@@ -268,15 +268,19 @@ bash scripts/slurm/submit_affetch_rockfish.sh
 
 The launcher counts pending accessions (input minus completion log) and passes `--array=1-N%128` to `sbatch` automatically.
 
-Optional environment variables for the job script:
+Optional environment variables for the launcher and job script:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `WK_DIR` | `${HOME}/scr4_sfried3/alphafoldfetch` | Work directory for inputs, logs, and structures |
+| `PROJECT_DIR` | `${HOME}/repositories/rockfish-projects/reu_project` | Path to this repository on Rockfish |
+| `SLURM_ACCOUNT` | (from job script) | Override SLURM account at submit time, e.g. `export SLURM_ACCOUNT=your_account` |
+| `ARRAY_CONCURRENCY` | `128` | Max concurrent array tasks (`%` cap in `sbatch --array`) |
 | `FILE_TYPE` | `pcz` | `affetch -f` format: `p`=PDB, `c`=CIF, `z`=gzip |
 | `MODEL_VERSION` | `6` | AlphaFold model version |
 | `CONDA_ENV` | `affetch` | Conda environment name (from `scripts/slurm/conda_env.yaml`) |
 
-Each array task downloads structures for **one** UniProt accession. Completed accessions are logged to `completed_accessions.txt`; failed downloads are logged to `failed_accessions.txt` so they can be retried or inspected separately. Re-submitting via the launcher skips finished IDs (same pattern as the Rockfish APBS example).
+Each array task downloads structures for **one** UniProt accession. Completed accessions are logged to `completed_accessions.txt`; failed downloads are logged to `failed_accessions.txt` so they can be retried or inspected separately. Per-task SLURM stdout/stderr are written to `${WK_DIR}/logs/affetch_<jobid>_<taskid>.out` and `.err`. Re-submitting via the launcher skips finished IDs (same pattern as the Rockfish APBS example).
 
 Structures are written to `${WK_DIR}/structures/` as `AF-<accession>-F1-model_v6.pdb.gz` (and `.cif.gz` by default).
 
@@ -284,11 +288,19 @@ Structures are written to `${WK_DIR}/structures/` as `AF-<accession>-F1-model_v6
 
 ### Run tests
 
+Requires Python **3.12+** (matches CI and `pyproject.toml`):
+
+```bash
+py -3.12 -m pytest tests/ -v
+```
+
+On Linux/macOS, if `python3.12` is your default:
+
 ```bash
 pytest tests/ -v
 ```
 
-Or via Make:
+Or via Make (Linux/macOS):
 
 ```bash
 make pytest

@@ -5,8 +5,8 @@
 # Usage (from project root on Rockfish):
 #   bash scripts/slurm/submit_affetch_rockfish.sh
 
-WK_DIR="${HOME}/scr4_sfried3/alphafoldfetch"
-PROJECT_DIR="${HOME}/repositories/rockfish-projects/reu_project"
+WK_DIR="${WK_DIR:-${HOME}/scr4_sfried3/alphafoldfetch}"
+PROJECT_DIR="${PROJECT_DIR:-${HOME}/repositories/rockfish-projects/reu_project}"
 INPUT_FILE="${WK_DIR}/incomplete_accessions.txt"
 COMPLETION_LOG="${WK_DIR}/completed_accessions.txt"
 ARRAY_CONCURRENCY="${ARRAY_CONCURRENCY:-128}"
@@ -27,17 +27,43 @@ JOB_SCRIPT="${PROJECT_DIR}/scripts/slurm/affetch_rockfish.sh"
 mkdir -p "${WK_DIR}"
 touch "${COMPLETION_LOG}"
 
+input_count="$(
+	awk 'NF' "${INPUT_FILE}" | sort -u | wc -l | awk '{print $1}'
+)"
+
+if [[ ${input_count} -eq 0 ]]; then
+	printf "Input file contains no accessions: %s\n" "${INPUT_FILE}" 1>&2
+	exit 1
+fi
+
 pending_count="$(
-	comm -23 <(sort -u "${INPUT_FILE}") <(sort -u "${COMPLETION_LOG}") | wc -l | awk '{print $1}'
+	comm -23 <(awk 'NF' "${INPUT_FILE}" | sort -u) <(awk 'NF' "${COMPLETION_LOG}" | sort -u) | wc -l | awk '{print $1}'
 )"
 
 if [[ ${pending_count} -eq 0 ]]; then
-	printf "No pending accessions to fetch (input and completion log are in sync).\n" 1>&2
+	printf "All %s accession(s) in %s are already listed in %s.\n" \
+		"${input_count}" "${INPUT_FILE}" "${COMPLETION_LOG}" 1>&2
 	exit 0
 fi
+
+mkdir -p "${WK_DIR}/logs"
 
 printf "Submitting array job for %s pending accession(s) (concurrency cap: %s).\n" \
 	"${pending_count}" "${ARRAY_CONCURRENCY}"
 
 cd "${PROJECT_DIR}" || exit 1
-sbatch --array=1-"${pending_count}"%"${ARRAY_CONCURRENCY}" "${JOB_SCRIPT}"
+
+sbatch_args=(
+	--output="${WK_DIR}/logs/affetch_%A_%a.out"
+	--error="${WK_DIR}/logs/affetch_%A_%a.err"
+	--array=1-"${pending_count}"%"${ARRAY_CONCURRENCY}"
+)
+
+if [[ -n ${SLURM_ACCOUNT:-} ]]; then
+	sbatch_args+=(--account="${SLURM_ACCOUNT}")
+fi
+
+submit_output="$(sbatch "${sbatch_args[@]}" "${JOB_SCRIPT}")"
+job_id="${submit_output##* }"
+printf "%s\n" "${submit_output}"
+printf "Track logs under %s/logs/affetch_%s_<taskid>.{out,err}\n" "${WK_DIR}" "${job_id}"

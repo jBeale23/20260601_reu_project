@@ -34,6 +34,24 @@ def extract_accessions(data: dict[str, Any]) -> list[str]:
     return sorted(seen)
 
 
+def fetch_warnings(data: dict[str, Any]) -> list[str]:
+    """Return human-readable warnings for incomplete InterPro fetch output."""
+    warnings: list[str] = []
+
+    if data.get("is_partial"):
+        warnings.append(
+            "DnaK fetch output is marked is_partial=true; accession list may be incomplete.",
+        )
+
+    partial_archs = [arch for arch in data.get("architectures", []) if arch.get("is_partial")]
+    if partial_archs:
+        warnings.append(
+            f"{len(partial_archs)} architecture(s) are partial; accession list may be incomplete.",
+        )
+
+    return warnings
+
+
 def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -52,8 +70,18 @@ def main() -> None:
     if not args.json_file.is_file():
         parser.error(f"JSON file not found: {args.json_file}")
 
-    data = json.loads(args.json_file.read_text())
+    try:
+        data = json.loads(args.json_file.read_text())
+    except json.JSONDecodeError as exc:
+        parser.error(f"Invalid JSON in {args.json_file}: {exc.msg}")
+
+    for warning in fetch_warnings(data):
+        sys.stderr.write(f"WARNING: {warning}\n")
+
     accessions = extract_accessions(data)
+
+    if not accessions:
+        sys.stderr.write("WARNING: No UniProt accessions found in input JSON.\n")
 
     if args.output is None:
         sys.stdout.write("\n".join(accessions))
