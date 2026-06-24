@@ -133,6 +133,7 @@ After installation, use the console commands:
 ```bash
 fetch-proteins-dnak --help
 fetch-architectures-dnaj --help
+extract-uniprot-ids --help
 ```
 
 Without installing, you can run the modules directly from the project root:
@@ -236,7 +237,7 @@ After fetching proteins from InterPro, you can download predicted structures fro
 
 ```bash
 fetch-proteins-dnak -o ipr012725_proteins.json
-python scripts/extract_uniprot_ids.py ipr012725_proteins.json -o accessions.txt
+extract-uniprot-ids ipr012725_proteins.json -o accessions.txt
 ```
 
 This also works on DnaJ architecture output (`ipr001623_domain_architectures_no_dedup.json`).
@@ -275,7 +276,7 @@ Optional environment variables for the job script:
 | `MODEL_VERSION` | `6` | AlphaFold model version |
 | `CONDA_ENV` | `affetch` | Conda environment name (from `scripts/slurm/conda_env.yaml`) |
 
-Each array task downloads structures for **one** UniProt accession. Completed accessions are logged to `completed_accessions.txt`; re-submitting via the launcher skips finished IDs (same pattern as the Rockfish APBS example).
+Each array task downloads structures for **one** UniProt accession. Completed accessions are logged to `completed_accessions.txt`; failed downloads are logged to `failed_accessions.txt` so they can be retried or inspected separately. Re-submitting via the launcher skips finished IDs (same pattern as the Rockfish APBS example).
 
 Structures are written to `${WK_DIR}/structures/` as `AF-<accession>-F1-model_v6.pdb.gz` (and `.cif.gz` by default).
 

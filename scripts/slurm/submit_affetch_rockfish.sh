@@ -18,6 +18,12 @@ JOB_SCRIPT="${PROJECT_DIR}/scripts/slurm/affetch_rockfish.sh"
 	exit 1
 }
 
+[[ -f ${JOB_SCRIPT} ]] || {
+	printf "SLURM job script not found: %s\n" "${JOB_SCRIPT}" 1>&2
+	printf "Set PROJECT_DIR or clone the repo to %s before submitting.\n" "${PROJECT_DIR}" 1>&2
+	exit 1
+}
+
 mkdir -p "${WK_DIR}"
 touch "${COMPLETION_LOG}"
 

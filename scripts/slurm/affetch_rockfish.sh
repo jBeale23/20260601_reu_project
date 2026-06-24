@@ -23,7 +23,7 @@
 #
 # Prepare inputs:
 #   fetch-proteins-dnak -o ipr012725_proteins.json
-#   python scripts/extract_uniprot_ids.py ipr012725_proteins.json -o accessions.txt
+#   extract-uniprot-ids ipr012725_proteins.json -o accessions.txt
 #   cp accessions.txt "${WK_DIR}/incomplete_accessions.txt"
 #
 # Submit (array bounds set automatically from pending accession count):
@@ -32,6 +32,7 @@
 WK_DIR="${HOME}/scr4_sfried3/alphafoldfetch"
 INPUT_FILE="${WK_DIR}/incomplete_accessions.txt"
 COMPLETION_LOG="${WK_DIR}/completed_accessions.txt"
+FAILED_LOG="${WK_DIR}/failed_accessions.txt"
 OUTPUT_DIR="${WK_DIR}/structures"
 
 # affetch --file-type letters: p=PDB, c=CIF, z=gzip (default in affetch is pcz)
@@ -66,4 +67,6 @@ fi
 
 if affetch -o "${OUTPUT_DIR}" -f "${FILE_TYPE}" -m "${MODEL_VERSION}" "${accession}"; then
 	printf "%s\n" "${accession}" >> "${COMPLETION_LOG}"
+else
+	printf "%s\n" "${accession}" >> "${FAILED_LOG}"
 fi

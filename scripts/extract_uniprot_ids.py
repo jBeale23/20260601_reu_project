@@ -49,6 +49,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if not args.json_file.is_file():
+        parser.error(f"JSON file not found: {args.json_file}")
+
     data = json.loads(args.json_file.read_text())
     accessions = extract_accessions(data)
 
