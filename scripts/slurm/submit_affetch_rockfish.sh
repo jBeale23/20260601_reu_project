@@ -49,7 +49,7 @@ fi
 mkdir -p "${WK_DIR}/logs"
 
 # This is done as slurm on rockfish is configured to allow a maximum array job size of 10,000
-pending_count=$(( "${pending_count}" > 10000 ? 10000 : "${pending_count}" ))
+pending_count=$(("${pending_count}" > 10000 ? 10000 : "${pending_count}"))
 
 printf "Submitting array job for %s pending accession(s) (concurrency cap: %s).\n" \
 	"${pending_count}" "${ARRAY_CONCURRENCY}"
