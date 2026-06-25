@@ -17,7 +17,7 @@
 #
 # Setup (once on Rockfish):
 #   conda env create -f scripts/slurm/conda_env.yaml
-#   conda activate affetch
+#   conda activate "${HOME}/affetch"
 #
 # Prepare inputs:
 #   fetch-proteins-dnak -o ipr012725_proteins.json
@@ -37,7 +37,7 @@ OUTPUT_DIR="${WK_DIR}/structures"
 FILE_TYPE="${FILE_TYPE:-pcz}"
 MODEL_VERSION="${MODEL_VERSION:-6}"
 
-CONDA_ENV="${CONDA_ENV:-affetch}"
+CONDA_ENV="${CONDA_ENV:-${HOME}/affetch}"
 
 ml anaconda3/2024.02-1
 conda activate "${CONDA_ENV}"
@@ -57,7 +57,7 @@ fi
 mkdir -p "${WK_DIR}" "${OUTPUT_DIR}"
 touch "${COMPLETION_LOG}" "${FAILED_LOG}"
 
-cd "${WK_DIR}" || exit
+cd "${WK_DIR}" || exit 1
 
 accession="$(
 	sed -n "${SLURM_ARRAY_TASK_ID}"p <(

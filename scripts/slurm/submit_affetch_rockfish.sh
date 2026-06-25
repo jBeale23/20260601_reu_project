@@ -6,7 +6,7 @@
 #   bash scripts/slurm/submit_affetch_rockfish.sh
 
 WK_DIR="${WK_DIR:-${HOME}/scr4_sfried3/alphafoldfetch}"
-PROJECT_DIR="${PROJECT_DIR:-${HOME}/repositories/rockfish-projects/reu_project}"
+PROJECT_DIR="${PROJECT_DIR:-${HOME}/repositories/20260601_reu_project}"
 INPUT_FILE="${WK_DIR}/incomplete_accessions.txt"
 COMPLETION_LOG="${WK_DIR}/completed_accessions.txt"
 ARRAY_CONCURRENCY="${ARRAY_CONCURRENCY:-128}"
