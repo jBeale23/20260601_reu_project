@@ -61,7 +61,7 @@ fi
 [[ -n ${REFERENCE_STRUCTURE} && -f ${REFERENCE_STRUCTURE} ]] || {
 	printf "Reference structure not found for %s under %s (model v%s; PDB required for pocket charge)\n" \
 		"${REFERENCE_ACCESSION}" "${STRUCTURES_DIR}" "${MODEL_VERSION}" 1>&2
-	printf "Ensure ${REFERENCE_ACCESSION} was downloaded via affetch before submitting.\n" 1>&2
+	printf 'Ensure %s was downloaded via affetch before submitting.\n' "${REFERENCE_ACCESSION}" 1>&2
 	exit 1
 }
 

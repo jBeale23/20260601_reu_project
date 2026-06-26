@@ -47,7 +47,7 @@ conda activate "${CONDA_ENV}"
 
 if ! command -v affetch > /dev/null 2>&1; then
 	printf "affetch not found after activating conda env '%s'\n" "${CONDA_ENV}" 1>&2
-	printf "Create the environment with: conda env create -f scripts/slurm/conda_env.yaml -p \"${HOME}/affetch\"\n" 1>&2
+	printf 'Create the environment with: conda env create -f scripts/slurm/conda_env.yaml -p "%s/affetch"\n' "${HOME}" 1>&2
 	exit 1
 fi
 
