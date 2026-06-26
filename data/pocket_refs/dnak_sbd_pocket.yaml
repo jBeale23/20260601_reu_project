@@ -1,0 +1,40 @@
+# DnaK/Hsp70 substrate-binding domain (SBD) peptide-binding pocket — v1
+#
+# Derived from PDB 1DKX (E. coli DnaK SBD + peptide NRLLLTG, chain B).
+# contact_residues: protein C-alpha atoms within 8 Å of the peptide backbone.
+# shell_radius_angstrom: additional protein residues within this distance of
+#   mapped contact residues are included when analyzing each structure.
+# sbd_residue_range: UniProt residue numbers for the SBD on P0A6Y8 (1DKX
+#   fragment 383-638; shell expansion is restricted to this mapped window).
+# min_plddt: exclude AlphaFold residues below this pLDDT from charge metrics.
+#
+# Reference: Zhu X, et al. Structural analysis of substrate binding by the
+# molecular chaperone DnaK. Science 1996. PDB 1DKX.
+# https://www.rcsb.org/structure/1DKX
+
+pocket_definition: dnak_sbd_v1
+reference_accession: P0A6Y8
+reference_pdb: 1DKX
+reference_pdb_url: https://www.rcsb.org/structure/1DKX
+shell_radius_angstrom: 8.0
+sbd_residue_range: [386, 638]
+min_plddt: 70.0
+max_contact_ca_distance: 5.0
+contact_residues:
+  - 402
+  - 403
+  - 404
+  - 425
+  - 426
+  - 427
+  - 428
+  - 429
+  - 430
+  - 433
+  - 434
+  - 435
+  - 436
+  - 437
+  - 438
+  - 458
+  - 468

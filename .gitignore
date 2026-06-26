@@ -1,11 +1,18 @@
 # Python
 __pycache__/
 *.egg-info/
+*.egg
 *.pyc
 *.pyo
 *.pyd
 .pytest_cache/
+.pytest_tmp/
 .ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
 
 # Environments
 .env
@@ -17,5 +24,43 @@ venv/
 .DS_Store
 Thumbs.db
 
-# json fetched files
+# InterPro fetch + pocket charge JSON (default CLI outputs)
 *.json
+
+# Rockfish work directory outputs (under WK_DIR on cluster or local test runs)
+array_queues/
+*.lock
+accessions.txt
+incomplete_accessions.txt
+completed_accessions.txt
+failed_accessions.txt
+completed_pocket.txt
+failed_pocket.txt
+structures/
+pocket_results/
+pocket_charge_*.json
+pocket_residues_*.csv
+contact_attribution_*.csv
+pocket_charge_summary.csv
+pocket_charge_summary.json
+merged_features/
+
+# Rockfish SLURM logs (under ${WK_DIR}/logs/)
+affetch_*.out
+affetch_*.err
+pocket_*.out
+pocket_*.err
+
+# Analyze-pocket-charge temp PDBs
+tmp_ref.pdb
+tmp_tgt.pdb
+
+# Project data outputs (reference YAML under data/pocket_refs/ stays tracked)
+data/dev_structures/
+data/pocket_refs/*.pdb
+data/pocket_charge_results/
+data/merged_features/
+data/jdp_classifications/
+
+# Shell test logs
+tests/*.log
