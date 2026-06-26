@@ -1,0 +1,10 @@
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12.8
+  - pip=25.0.1
+  - pip:
+    - biopython>=1.84
+    - numpy>=1.26
+    - pyyaml>=6.0
+    - scipy>=1.11
