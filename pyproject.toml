@@ -21,6 +21,7 @@ dev = [
 fetch-proteins-dnak = "data_fetching.fetch_proteins_dnak:cli"
 fetch-architectures-dnaj = "data_fetching.fetch_architectures_dnaj:cli"
 extract-uniprot-ids = "scripts.extract_uniprot_ids:main"
+prepare-rockfish-accessions = "scripts.rockfish_queue:main_prepare"
 
 [tool.setuptools.packages.find]
 where = ["."]
