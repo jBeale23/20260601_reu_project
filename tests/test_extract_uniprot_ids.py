@@ -43,6 +43,12 @@ def test_extract_accessions_from_dnaj_output() -> None:
     assert extract_accessions(data) == ["P1", "P2", "P3"]
 
 
+def test_extract_accessions_strips_whitespace() -> None:
+    """Whitespace around accessions is normalized away."""
+    data = {"proteins": [{"metadata": {"accession": " P0A6Y8 "}}]}
+    assert extract_accessions(data) == ["P0A6Y8"]
+
+
 def test_extract_accessions_cli(tmp_path: Path) -> None:
     """CLI writes one accession per line."""
     json_file = tmp_path / "proteins.json"

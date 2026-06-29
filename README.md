@@ -134,6 +134,7 @@ After installation, use the console commands:
 fetch-proteins-dnak --help
 fetch-architectures-dnaj --help
 extract-uniprot-ids --help
+prepare-rockfish-accessions --help
 ```
 
 Without installing, you can run the modules directly from the project root:
@@ -233,40 +234,55 @@ Fetched JSON files are gitignored by default.
 
 After fetching proteins from InterPro, you can download predicted structures from the [AlphaFold Database](https://alphafold.ebi.ac.uk/) using [AlphaFoldFetch](https://github.com/mansanlab/alphafoldfetch) (`affetch`).
 
-### 1. Extract UniProt accessions
+**Always submit via `scripts/slurm/submit_affetch_rockfish.sh`** — do not call `affetch_rockfish.sh` directly (workers require a submit-time accession snapshot).
 
-```bash
-fetch-proteins-dnak -o ipr012725_proteins.json
-extract-uniprot-ids ipr012725_proteins.json -o accessions.txt
-```
+### 1. Extract and prepare UniProt accessions
 
-This also works on DnaJ architecture output (`ipr001623_domain_architectures_no_dedup.json`).
-
-### 2. Set up AlphaFoldFetch on Rockfish (once)
-
-```bash
-conda env create -f scripts/slurm/conda_env.yaml
-conda activate affetch
-```
-
-### 3. Prepare work directory on Rockfish
-
-Copy accessions into the work directory (the SLURM script creates missing directories and the completion log automatically):
+Run **once after each InterPro fetch** (DnaK or DnaJ). This dedupes accessions, validates counts against the fetch JSON, and installs the Rockfish input file.
 
 ```bash
 WK_DIR="${HOME}/scr4_sfried3/alphafoldfetch"
-cp accessions.txt "${WK_DIR}/incomplete_accessions.txt"
+fetch-proteins-dnak -o ipr012725_proteins.json
+prepare-rockfish-accessions ipr012725_proteins.json --wk-dir "${WK_DIR}"
 ```
 
-The array job exits immediately with an error if `incomplete_accessions.txt` is missing.
+For DnaJ architectures (many duplicate instances across architectures are collapsed to unique IDs):
+
+```bash
+fetch-architectures-dnaj -o ipr001623_domain_architectures_no_dedup.json
+prepare-rockfish-accessions ipr001623_domain_architectures_no_dedup.json --wk-dir "${WK_DIR}"
+```
+
+`prepare-rockfish-accessions` writes `${WK_DIR}/incomplete_accessions.txt` with **one unique accession per line**. Stderr reports `raw_records`, `unique_accessions`, and `duplicate_records_skipped`.
+
+`extract-uniprot-ids` remains available for quick stdout/file extraction with the same dedupe logic.
+
+### 2. Pre-flight checks (before spending SLURM hours)
+
+```bash
+wc -l "${WK_DIR}/incomplete_accessions.txt"
+sort "${WK_DIR}/incomplete_accessions.txt" | uniq -d   # must print nothing
+```
+
+Do **not** manually `cp` or append to `incomplete_accessions.txt` — duplicates and overlapping array jobs were the main cause of repeated downloads. Re-run `prepare-rockfish-accessions` after any new fetch.
+
+### 3. Set up AlphaFoldFetch on Rockfish (once)
+
+```bash
+conda env create -f scripts/slurm/conda_env.yaml -p "${HOME}/affetch"
+conda activate "${HOME}/affetch"
+```
 
 ### 4. Submit the SLURM array job
 
 ```bash
+cd "${PROJECT_DIR}"
 bash scripts/slurm/submit_affetch_rockfish.sh
 ```
 
-The launcher counts pending accessions (input minus completion log) and passes `--array=1-N%128` to `sbatch` automatically.
+The launcher dedupes the input, writes a **fixed snapshot** under `${WK_DIR}/array_queues/`, and passes it to each array task via `ARRAY_QUEUE_FILE`. Each task ID maps to **one line** in that snapshot for the life of the job. Tasks skip accessions already in `completed_accessions.txt` or when the structure file already exists on disk.
+
+Re-submit the launcher to process the next batch of pending accessions (up to 10,000 per submission).
 
 Optional environment variables for the launcher and job script:
 
@@ -280,9 +296,29 @@ Optional environment variables for the launcher and job script:
 | `MODEL_VERSION` | `6` | AlphaFold model version |
 | `CONDA_ENV` | `affetch` | Conda environment name (from `scripts/slurm/conda_env.yaml`) |
 
-Each array task downloads structures for **one** UniProt accession. Completed accessions are logged to `completed_accessions.txt`; failed downloads are logged to `failed_accessions.txt` so they can be retried or inspected separately. Per-task SLURM stdout/stderr are written to `${WK_DIR}/logs/affetch_<jobid>_<taskid>.out` and `.err`. Re-submitting via the launcher skips finished IDs (same pattern as the Rockfish APBS example).
+Each array task downloads structures for **one** accession from its snapshot line. Completed accessions are logged to `completed_accessions.txt`; failed downloads go to `failed_accessions.txt`. Completion logging uses file locks to avoid duplicate log lines. Per-task SLURM stdout/stderr are written to `${WK_DIR}/logs/affetch_<jobid>_<taskid>.out` and `.err`.
 
 Structures are written to `${WK_DIR}/structures/` as `AF-<accession>-F1-model_v6.pdb.gz` (and `.cif.gz` by default).
+
+### Work directory layout
+
+| Path | Purpose |
+|------|---------|
+| `${WK_DIR}/incomplete_accessions.txt` | Master deduped accession list (from `prepare-rockfish-accessions`) |
+| `${WK_DIR}/array_queues/*.txt` | Fixed per-submission snapshots (do not edit) |
+| `${WK_DIR}/completed_accessions.txt` | Affetch finished IDs |
+| `${WK_DIR}/failed_accessions.txt` | Affetch failures (retry candidates) |
+| `${WK_DIR}/structures/` | AlphaFold PDB/CIF files from affetch |
+| `${WK_DIR}/logs/` | SLURM stdout/stderr per array task |
+
+### Troubleshooting duplicate or repeated jobs
+
+If the same accession was downloaded multiple times (overlapping array submissions or duplicate lines in the input file):
+
+1. Dedupe completion logs: `sort -u -o completed_accessions.txt completed_accessions.txt`
+2. Re-run `prepare-rockfish-accessions <fetch.json> --wk-dir "${WK_DIR}"` to refresh the master input.
+3. Submit only via `submit_affetch_rockfish.sh` (never re-run worker scripts from an old job ID).
+4. Confirm `sort incomplete_accessions.txt | uniq -d` prints nothing before the next large submission.
 
 ## Development
 
@@ -337,14 +373,18 @@ data_fetching/
   utils.py                      # Shared HTTP, logging, output, and checkpoint helpers
 scripts/
   extract_uniprot_ids.py        # UniProt ID extraction for AlphaFoldFetch
+  rockfish_queue.py             # Dedupe, validate counts, write array snapshots
   slurm/
     affetch_rockfish.sh         # Rockfish array job for affetch
-    submit_affetch_rockfish.sh  # Launcher: sets array bounds and submits job
+    submit_affetch_rockfish.sh  # Launcher: snapshot + array bounds + sbatch
+    rockfish_common.sh          # Shared snapshot/locking helpers for array workers
     conda_env.yaml              # Pinned conda env for affetch on Rockfish
 tests/
   test_fetch_dnaj.py
   test_fetch_dnak.py
   test_extract_uniprot_ids.py
+  test_rockfish_queue.py
+  test_slurm_regression.py
 pyproject.toml                  # Package metadata, dependencies, and console script entry points
 ```
 
