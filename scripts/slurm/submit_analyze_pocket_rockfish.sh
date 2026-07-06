@@ -56,7 +56,7 @@ if [[ ${pending_count} -eq 0 ]]; then
 fi
 
 SNAPSHOT="${SNAPSHOT_DIR}/pocket_$(date +%Y%m%d_%H%M%S).txt"
-comm -23 <(comm -23 "${INPUT_FILE}" <(sort -u "${FAILED_LOG}")) "${COMPLETION_LOG}" | head -n "${MAX_ARRAY_TASKS}" > "${SNAPSHOT}"
+comm -23 <(comm -23 "${INPUT_FILE}" <(sort -u "${FAILED_LOG}")) <(sort -u "${COMPLETION_LOG}") | head -n "${MAX_ARRAY_TASKS}" > "${SNAPSHOT}"
 
 pending_count="$(wc -l "${SNAPSHOT}" | awk '{print $1}')"
 
