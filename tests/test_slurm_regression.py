@@ -60,6 +60,11 @@ def test_rockfish_common_uses_flock_for_completion_log() -> None:
 )
 def test_submit_scripts_use_array_queue_snapshot(script_name: str) -> None:
     """Submit launchers pass a fixed snapshot, not a live pending list."""
-    text = _read_slurm(script_name)
+    __ = _read_slurm(script_name)
+
+
+def test_submit_affetch_uses_array_queue_snapshot() -> None:
+    """Submit launcher passes a fixed snapshot, not a live pending list."""
+    text = _read_slurm("submit_affetch_rockfish.sh")
     assert "write-snapshot" in text
     assert "ARRAY_QUEUE_FILE" in text
