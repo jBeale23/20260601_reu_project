@@ -10,6 +10,7 @@ WK_DIR="${WK_DIR:-${HOME}/scr4_sfried3/alphafoldfetch}"
 PROJECT_DIR="${PROJECT_DIR:-${HOME}/repositories/20260601_reu_project}"
 INPUT_FILE="${WK_DIR}/incomplete_accessions.txt"
 COMPLETION_LOG="${WK_DIR}/completed_pocket.txt"
+FAILED_LOG="${WK_DIR}/failed_pocket.txt"
 RESULTS_DIR="${WK_DIR}/pocket_results"
 ARRAY_CONCURRENCY="${ARRAY_CONCURRENCY:-128}"
 JOB_SCRIPT="${PROJECT_DIR}/scripts/slurm/analyze_pocket_rockfish.sh"
@@ -45,7 +46,7 @@ if [[ ${input_count} -eq 0 ]]; then
 fi
 
 pending_count="$(
-	comm -23 <(awk 'NF' "${INPUT_FILE}" | sort -u) <(awk 'NF' "${COMPLETION_LOG}" | sort -u) | wc -l | awk '{print $1}'
+	comm -23 <(comm -23 "${INPUT_FILE}" "${FAILED_LOG}" | sort -u) <(sort -u "${COMPLETION_LOG}") | wc -l | awk '{print $1}'
 )"
 
 if [[ ${pending_count} -eq 0 ]]; then
@@ -56,12 +57,12 @@ fi
 
 SNAPSHOT="${SNAPSHOT_DIR}/pocket_$(date +%Y%m%d_%H%M%S).txt"
 python -m scripts.rockfish_queue write-snapshot \
-	--input "${INPUT_FILE}" \
+	--input <(comm -23 "${INPUT_FILE}" "${FAILED_LOG}") \
 	--completed "${COMPLETION_LOG}" \
 	-o "${SNAPSHOT}" \
 	--limit "${MAX_ARRAY_TASKS}"
 
-pending_count="$(wc -l < "${SNAPSHOT}" | awk '{print $1}')"
+pending_count="$(wc -l "${SNAPSHOT}" | awk '{print $1}')"
 
 mkdir -p "${WK_DIR}/logs"
 
