@@ -61,7 +61,8 @@ fi
 [[ -n ${REFERENCE_STRUCTURE} && -f ${REFERENCE_STRUCTURE} ]] || {
 	printf "Reference structure not found for %s under %s (model v%s; PDB required for pocket charge)\n" \
 		"${REFERENCE_ACCESSION}" "${STRUCTURES_DIR}" "${MODEL_VERSION}" 1>&2
-	printf 'Ensure %s was downloaded via affetch before submitting.\n' "${REFERENCE_ACCESSION}" 1>&2
+	printf 'Ensure %s was downloaded via affetch with FILE_TYPE including p (e.g. pz or pcz) before submitting.\n' \
+		"${REFERENCE_ACCESSION}" 1>&2
 	exit 1
 }
 
@@ -88,8 +89,10 @@ fi
 
 structure="$(rockfish_resolve_pdb_structure "${accession}" "${STRUCTURES_DIR}" "${MODEL_VERSION}")"
 if [[ -z ${structure} || ! -f ${structure} ]]; then
-	printf "Structure not found for %s under %s (model v%s; PDB required for pocket charge)\n" "${accession}" "${STRUCTURES_DIR}" "${MODEL_VERSION}" 1>&2
-	rockfish_log_failure "${accession}" "${FAILED_LOG}" "${FAILED_LOCK}"
+	reason="$(rockfish_diagnose_missing_pdb "${accession}" "${STRUCTURES_DIR}" "${MODEL_VERSION}")"
+	printf "Structure not found for %s under %s (model v%s; reason=%s): %s\n" \
+		"${accession}" "${STRUCTURES_DIR}" "${MODEL_VERSION}" "${reason}" "${ROCKFISH_MISSING_DETAIL}" 1>&2
+	rockfish_log_failure "${accession}" "${FAILED_LOG}" "${FAILED_LOCK}" "${reason}" "${ROCKFISH_MISSING_DETAIL}"
 	exit 1
 fi
 
@@ -99,6 +102,8 @@ if analyze-pocket-charge "${structure}" \
 	-o "${output_json}"; then
 	rockfish_mark_completed "${accession}" "${COMPLETION_LOG}" "${COMPLETION_LOCK}"
 else
-	rockfish_log_failure "${accession}" "${FAILED_LOG}" "${FAILED_LOCK}"
+	printf "analyze-pocket-charge failed for %s (nonzero exit)\n" "${accession}" 1>&2
+	rockfish_log_failure "${accession}" "${FAILED_LOG}" "${FAILED_LOCK}" "analyze_nonzero" \
+		"analyze-pocket-charge returned nonzero"
 	exit 1
 fi

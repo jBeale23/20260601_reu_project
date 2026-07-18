@@ -203,7 +203,8 @@ def test_outer_join_all_sources() -> None:
             pocket_by_accession=pocket_by_accession,
             jdp_by_accession=jdp_by_accession,
             jdp_identity_by_accession=jdp_identity_by_accession,
-            provided_sources={"dnak": True, "dnaj": True, "pocket": True, "jdp": True},
+            motif_by_accession={},
+            provided_sources={"dnak": True, "dnaj": True, "pocket": True, "jdp": True, "motif": False},
             join="outer",
         ),
     )
@@ -237,7 +238,8 @@ def test_inner_join_requires_all_provided_sources() -> None:
             pocket_by_accession=pocket_by_accession,
             jdp_by_accession={},
             jdp_identity_by_accession={},
-            provided_sources={"dnak": True, "dnaj": False, "pocket": True, "jdp": False},
+            motif_by_accession={},
+            provided_sources={"dnak": True, "dnaj": False, "pocket": True, "jdp": False, "motif": False},
             join="inner",
         ),
     )
@@ -258,7 +260,8 @@ def test_pocket_quality_flags_renamed() -> None:
             pocket_by_accession=pocket_by_accession,
             jdp_by_accession={},
             jdp_identity_by_accession={},
-            provided_sources={"dnak": False, "dnaj": False, "pocket": True, "jdp": False},
+            motif_by_accession={},
+            provided_sources={"dnak": False, "dnaj": False, "pocket": True, "jdp": False, "motif": False},
             join="outer",
         ),
     )
@@ -288,7 +291,8 @@ def test_write_merged_all_csv_roundtrip(tmp_path: Path) -> None:
             pocket_by_accession=pocket_by_accession,
             jdp_by_accession={},
             jdp_identity_by_accession={},
-            provided_sources={"dnak": False, "dnaj": False, "pocket": True, "jdp": False},
+            motif_by_accession={},
+            provided_sources={"dnak": False, "dnaj": False, "pocket": True, "jdp": False, "motif": False},
             join="outer",
         ),
     )

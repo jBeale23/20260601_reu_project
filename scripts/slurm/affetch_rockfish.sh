@@ -80,6 +80,9 @@ fi
 if affetch -o "${OUTPUT_DIR}" -f "${FILE_TYPE}" -m "${MODEL_VERSION}" "${accession}"; then
 	rockfish_mark_completed "${accession}" "${COMPLETION_LOG}" "${COMPLETION_LOCK}"
 else
-	rockfish_log_failure "${accession}" "${FAILED_LOG}" "${FAILED_LOCK}"
+	printf "affetch failed for %s (FILE_TYPE=%s MODEL_VERSION=%s)\n" \
+		"${accession}" "${FILE_TYPE}" "${MODEL_VERSION}" 1>&2
+	rockfish_log_failure "${accession}" "${FAILED_LOG}" "${FAILED_LOCK}" "affetch_nonzero" \
+		"affetch returned nonzero (FILE_TYPE=${FILE_TYPE}; MODEL_VERSION=${MODEL_VERSION})"
 	exit 1
 fi

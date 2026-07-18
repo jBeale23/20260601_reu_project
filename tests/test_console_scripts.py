@@ -16,10 +16,12 @@ CONSOLE_SCRIPT_TARGETS: dict[str, str] = {
     "fetch-architectures-dnaj": "data_fetching.fetch_architectures_dnaj:cli",
     "extract-uniprot-ids": "scripts.extract_uniprot_ids:main",
     "prepare-rockfish-accessions": "scripts.rockfish_queue:main_prepare",
+    "summarize-rockfish-failures": "scripts.rockfish_queue:main_summarize_failures",
     "merge-features": "scripts.merge_features:main",
     "merge-all-features": "scripts.merge_all_features:main",
     "classify-jdp": "jdp_classifier.cli:main",
     "analyze-pocket-charge": "structure_analysis.cli:main",
+    "analyze-motif-conservation": "motif_conservation.cli:main",
 }
 
 
