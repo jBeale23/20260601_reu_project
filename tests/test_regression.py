@@ -67,6 +67,12 @@ def test_merge_all_output_includes_all_jdp_data_columns() -> None:
         assert column in MERGE_ALL_OUTPUT_COLUMNS
 
 
+def test_merge_all_output_includes_chaperone_profile_columns() -> None:
+    """Unified CSV exposes derived DnaJ/DnaK classification profile columns."""
+    for column in ("chaperone_system_membership", "unified_confidence_tier", "classification_tags"):
+        assert column in MERGE_ALL_OUTPUT_COLUMNS
+
+
 def test_rockfish_prepare_matches_extract_accessions(tmp_path: Path) -> None:
     """prepare-rockfish-accessions and extract-uniprot-ids yield the same unique ID set."""
     fetch_json = tmp_path / "dnaj.json"

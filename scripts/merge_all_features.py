@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from jdp_classifier.classify import JDP_DATA_COLUMNS, JDP_SOURCE_COLUMNS
+from scripts.chaperone_profiles import ChaperonePresence, derive_chaperone_classification_fields
 from scripts.extract_uniprot_ids import fetch_warnings
 from scripts.merge_features import (
     POCKET_DATA_COLUMNS,
@@ -79,6 +80,9 @@ DERIVED_COLUMNS = [
     "has_jdp_classification",
     "has_motif_features",
     "charge_inversion_candidate",
+    "chaperone_system_membership",
+    "unified_confidence_tier",
+    "classification_tags",
 ]
 
 OUTPUT_COLUMNS = [
@@ -293,6 +297,24 @@ def merge_all_features(inputs: MergeAllInputs) -> list[dict[str, str]]:
             row.update(motif_row)
         else:
             row.update(_empty_motif_row())
+
+        charge_inversion = row["charge_inversion_candidate"] == "true"
+        jdp_fields = {column: row.get(column, "") for column in JDP_DATA_COLUMNS}
+        pocket_fields = {column: row.get(column, "") for column in POCKET_OUTPUT_COLUMNS}
+        row.update(
+            derive_chaperone_classification_fields(
+                presence=ChaperonePresence(
+                    has_dnak=presence.has_dnak,
+                    has_dnaj=presence.has_dnaj,
+                    has_jdp=presence.has_jdp,
+                    has_pocket=presence.has_pocket,
+                    has_motif=presence.has_motif,
+                    charge_inversion_candidate=charge_inversion,
+                ),
+                jdp_row=jdp_fields,
+                pocket_row=pocket_fields,
+            ),
+        )
 
         merged_rows.append(row)
 

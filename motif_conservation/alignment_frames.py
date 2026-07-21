@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -37,16 +38,11 @@ def _msa_consensus(msa: list[str]) -> str:
     length = len(msa[0])
     chars: list[str] = []
     for col in range(length):
-        counts: dict[str, int] = {}
-        for row in msa:
-            aa = row[col]
-            if aa == "-":
-                continue
-            counts[aa] = counts.get(aa, 0) + 1
+        counts = Counter(row[col] for row in msa if row[col] != "-")
         if not counts:
             chars.append("X")
             continue
-        chars.append(max(counts, key=counts.get))
+        chars.append(counts.most_common(1)[0][0])
     return "".join(chars)
 
 
