@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -25,15 +26,27 @@ def extract_accessions_normalized(data: dict[str, Any]) -> list[str]:
     return extract_accessions(data)
 
 
+def accession_from_log_line(line: str) -> str | None:
+    r"""Return the accession from a queue/completion/failure log line.
+
+    Failure logs may be ``accession`` or ``accession\treason_code\tdetail``.
+    """
+    stripped = line.strip()
+    if not stripped:
+        return None
+    first_field = stripped.split("\t", maxsplit=1)[0].strip()
+    return normalize_accession(first_field)
+
+
 def load_accession_lines(path: Path) -> list[str]:
-    """Load non-empty accession lines from a text file, preserving first-seen order."""
+    """Load non-empty accession keys from a text file, preserving first-seen order."""
     if not path.is_file():
         return []
 
     ordered: list[str] = []
     seen: set[str] = set()
     for line in path.read_text(encoding="utf-8").splitlines():
-        accession = normalize_accession(line)
+        accession = accession_from_log_line(line)
         if accession and accession not in seen:
             seen.add(accession)
             ordered.append(accession)
@@ -46,11 +59,155 @@ def write_accession_lines(path: Path, accessions: list[str]) -> None:
     path.write_text("\n".join(accessions) + ("\n" if accessions else ""), encoding="utf-8")
 
 
-def pending_accessions(input_file: Path, completion_log: Path) -> list[str]:
-    """Return input accessions not present in the completion log (both deduped)."""
+@dataclass(frozen=True, slots=True)
+class FailureRecord:
+    """One reason-coded failure log entry."""
+
+    accession: str
+    reason_code: str
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
+class FailureSummary:
+    """Aggregated counts from a Rockfish failure log."""
+
+    total: int
+    counts_by_reason: dict[str, int]
+    records: tuple[FailureRecord, ...]
+
+    def accessions_for_reason(self, reason_code: str) -> list[str]:
+        """Return unique accessions matching ``reason_code`` (first-seen order)."""
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for record in self.records:
+            if record.reason_code != reason_code:
+                continue
+            if record.accession in seen:
+                continue
+            seen.add(record.accession)
+            ordered.append(record.accession)
+        return ordered
+
+
+def parse_failure_log_line(line: str) -> FailureRecord | None:
+    r"""Parse ``accession`` or ``accession\treason_code\tdetail`` into a FailureRecord."""
+    stripped = line.strip()
+    if not stripped:
+        return None
+    accession_part, *extra = stripped.split("\t")
+    accession = normalize_accession(accession_part)
+    if not accession:
+        return None
+    reason_code = "unspecified"
+    detail = ""
+    if extra:
+        reason_code = extra[0].strip() or "unspecified"
+        if extra[1:]:
+            detail = extra[1].strip()
+    return FailureRecord(accession=accession, reason_code=reason_code, detail=detail)
+
+
+def load_failure_records(path: Path) -> list[FailureRecord]:
+    """Load failure records from a Rockfish failed_*.txt log."""
+    if not path.is_file():
+        return []
+    records: list[FailureRecord] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        record = parse_failure_log_line(line)
+        if record is not None:
+            records.append(record)
+    return records
+
+
+def summarize_failures(path: Path) -> FailureSummary:
+    """Count failure reason codes (useful after a large Rockfish array run)."""
+    records = load_failure_records(path)
+    counts: dict[str, int] = {}
+    for record in records:
+        counts[record.reason_code] = counts.get(record.reason_code, 0) + 1
+    # Stable descending-by-count, then reason name.
+    ordered_counts = dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+    return FailureSummary(total=len(records), counts_by_reason=ordered_counts, records=tuple(records))
+
+
+def pending_accessions(
+    input_file: Path,
+    completion_log: Path,
+    *,
+    failed_log: Path | None = None,
+    include_failed: bool = False,
+    retry_failed_only: bool = False,
+) -> list[str]:
+    """Return accessions still needing work.
+
+    By default excludes completed and failed IDs. Pass ``include_failed=True``
+    (CLI ``--retry-failed``) to re-queue known failures. Pass
+    ``retry_failed_only=True`` to queue only failed IDs that are not completed.
+    """
     input_accessions = load_accession_lines(input_file)
     completed = set(load_accession_lines(completion_log))
-    return [accession for accession in input_accessions if accession not in completed]
+    failed = set(load_accession_lines(failed_log)) if failed_log is not None else set()
+
+    if retry_failed_only:
+        return [accession for accession in input_accessions if accession in failed and accession not in completed]
+
+    pending = [accession for accession in input_accessions if accession not in completed]
+    if include_failed or not failed:
+        return pending
+    return [accession for accession in pending if accession not in failed]
+
+
+def pdb_structure_path(accession: str, structures_dir: Path, model_version: str) -> Path | None:
+    """Return path to AF PDB (.pdb.gz or .pdb) when present."""
+    base = structures_dir / f"AF-{accession}-F1-model_v{model_version}"
+    for suffix in (".pdb.gz", ".pdb"):
+        candidate = Path(str(base) + suffix)
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def cif_structure_path(accession: str, structures_dir: Path, model_version: str) -> Path | None:
+    """Return path to AF CIF (.cif.gz or .cif) when present."""
+    base = structures_dir / f"AF-{accession}-F1-model_v{model_version}"
+    for suffix in (".cif.gz", ".cif"):
+        candidate = Path(str(base) + suffix)
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def filter_accessions_with_pdb(
+    accessions: list[str],
+    structures_dir: Path,
+    model_version: str,
+) -> tuple[list[str], list[str], list[str]]:
+    """Split accessions into (has_pdb, cif_only, missing_any)."""
+    with_pdb: list[str] = []
+    cif_only: list[str] = []
+    missing: list[str] = []
+    for accession in accessions:
+        if pdb_structure_path(accession, structures_dir, model_version) is not None:
+            with_pdb.append(accession)
+        elif cif_structure_path(accession, structures_dir, model_version) is not None:
+            cif_only.append(accession)
+        else:
+            missing.append(accession)
+    return with_pdb, cif_only, missing
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotStats:
+    """Counts reported when writing an array snapshot."""
+
+    input_count: int
+    completed_count: int
+    failed_count: int
+    pending_count: int
+    snapshot_count: int
+    skipped_no_pdb: int = 0
+    skipped_cif_only: int = 0
 
 
 def write_array_snapshot(
@@ -134,20 +291,74 @@ def _run_prepare_command(args: argparse.Namespace) -> None:
     sys.stderr.write(f"Wrote {args.output} ({len(accessions)} unique accessions).\n")
 
 
-def _run_snapshot_command(args: argparse.Namespace) -> None:
+def _run_snapshot_command(args: argparse.Namespace) -> SnapshotStats:
     if not args.input.is_file():
         msg = f"Input file not found: {args.input}"
         raise SystemExit(msg)
 
-    pending = pending_accessions(args.input, args.completed)
+    input_accessions = load_accession_lines(args.input)
+    completed = load_accession_lines(args.completed)
+    failed_path: Path | None = args.failed
+    failed = load_accession_lines(failed_path) if failed_path is not None else []
+
+    pending = pending_accessions(
+        args.input,
+        args.completed,
+        failed_log=failed_path,
+        include_failed=args.retry_failed,
+        retry_failed_only=args.retry_failed_only,
+    )
+
+    skipped_no_pdb = 0
+    skipped_cif_only = 0
+    if args.require_pdb:
+        if args.structures_dir is None:
+            msg = "--require-pdb needs --structures-dir"
+            raise SystemExit(msg)
+        with_pdb, cif_only, missing = filter_accessions_with_pdb(
+            pending,
+            args.structures_dir,
+            str(args.model_version),
+        )
+        skipped_cif_only = len(cif_only)
+        skipped_no_pdb = len(missing) + skipped_cif_only
+        if args.skipped_output is not None:
+            skipped_rows = [f"{accession}\tcif_only\tCIF present but PDB required" for accession in cif_only] + [
+                f"{accession}\tmissing_any_structure\tNo AF PDB/CIF under structures dir" for accession in missing
+            ]
+            args.skipped_output.parent.mkdir(parents=True, exist_ok=True)
+            args.skipped_output.write_text(
+                "\n".join(skipped_rows) + ("\n" if skipped_rows else ""),
+                encoding="utf-8",
+            )
+        pending = with_pdb
+
     if not pending:
+        sys.stderr.write(
+            f"Nothing to queue: input={len(input_accessions)} completed={len(completed)} "
+            f"failed={len(failed)} pending=0 "
+            f"skipped_no_pdb={skipped_no_pdb} (cif_only={skipped_cif_only}).\n",
+        )
         raise SystemExit(2)
 
     snapshot_rows = write_array_snapshot(pending, args.output, limit=args.limit)
-    sys.stderr.write(
-        f"Wrote snapshot {args.output} with {len(snapshot_rows)} accession(s) "
-        f"({len(pending)} pending total, limit {args.limit}).\n",
+    stats = SnapshotStats(
+        input_count=len(input_accessions),
+        completed_count=len(completed),
+        failed_count=len(failed),
+        pending_count=len(pending),
+        snapshot_count=len(snapshot_rows),
+        skipped_no_pdb=skipped_no_pdb,
+        skipped_cif_only=skipped_cif_only,
     )
+    sys.stderr.write(
+        f"Wrote snapshot {args.output} with {stats.snapshot_count} accession(s) "
+        f"(input={stats.input_count} completed={stats.completed_count} "
+        f"failed={stats.failed_count} pending={stats.pending_count} "
+        f"skipped_no_pdb={stats.skipped_no_pdb} cif_only={stats.skipped_cif_only} "
+        f"limit={args.limit}).\n",
+    )
+    return stats
 
 
 def _run_dedupe_command(args: argparse.Namespace) -> None:
@@ -158,11 +369,56 @@ def _run_dedupe_command(args: argparse.Namespace) -> None:
     before = args.accession_file.read_text(encoding="utf-8").splitlines()
     accessions = load_accession_lines(args.accession_file)
     write_accession_lines(args.accession_file, accessions)
-    removed = len([line for line in before if normalize_accession(line)]) - len(accessions)
+    removed = len([line for line in before if accession_from_log_line(line)]) - len(accessions)
     sys.stderr.write(
         f"Deduped {args.accession_file}: {len(accessions)} unique accession(s) "
         f"({removed} duplicate line(s) removed).\n",
     )
+
+
+def _run_summarize_failures_command(args: argparse.Namespace) -> None:
+    if not args.failed_log.is_file():
+        msg = f"Failure log not found: {args.failed_log}"
+        raise SystemExit(msg)
+
+    summary = summarize_failures(args.failed_log)
+    sys.stderr.write(f"Failure log: {args.failed_log}\n")
+    sys.stderr.write(f"Total failure rows: {summary.total}\n")
+    if not summary.counts_by_reason:
+        sys.stderr.write("No failure rows to summarize.\n")
+        return
+
+    sys.stderr.write("Counts by reason_code:\n")
+    for reason, count in summary.counts_by_reason.items():
+        sys.stderr.write(f"  {reason}\t{count}\n")
+
+    if args.json_output is not None:
+        payload = {
+            "failed_log": str(args.failed_log),
+            "total": summary.total,
+            "counts_by_reason": summary.counts_by_reason,
+            "records": [
+                {
+                    "accession": record.accession,
+                    "reason_code": record.reason_code,
+                    "detail": record.detail,
+                }
+                for record in summary.records
+            ],
+        }
+        args.json_output.parent.mkdir(parents=True, exist_ok=True)
+        args.json_output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        sys.stderr.write(f"Wrote JSON summary: {args.json_output}\n")
+
+    if args.reason is not None:
+        accessions = summary.accessions_for_reason(args.reason)
+        if args.write_accessions is None:
+            msg = "--reason requires --write-accessions"
+            raise SystemExit(msg)
+        write_accession_lines(args.write_accessions, accessions)
+        sys.stderr.write(
+            f"Wrote {len(accessions)} accession(s) with reason '{args.reason}' to {args.write_accessions}\n",
+        )
 
 
 def main() -> None:
@@ -185,10 +441,48 @@ def main() -> None:
 
     snapshot = subparsers.add_parser(
         "write-snapshot",
-        help="Write a fixed array snapshot from incomplete minus completed accessions",
+        help="Write a fixed array snapshot from incomplete minus completed/failed accessions",
     )
     snapshot.add_argument("--input", type=Path, required=True, help="incomplete_accessions.txt")
     snapshot.add_argument("--completed", type=Path, required=True, help="completion log file")
+    snapshot.add_argument(
+        "--failed",
+        type=Path,
+        default=None,
+        help="Failure log (excluded by default unless --retry-failed)",
+    )
+    snapshot.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="Include previously failed accessions in the pending queue",
+    )
+    snapshot.add_argument(
+        "--retry-failed-only",
+        action="store_true",
+        help="Queue only failed accessions that are not completed",
+    )
+    snapshot.add_argument(
+        "--require-pdb",
+        action="store_true",
+        help="Keep only accessions with resolvable AF PDB under --structures-dir",
+    )
+    snapshot.add_argument(
+        "--structures-dir",
+        type=Path,
+        default=None,
+        help="AlphaFold structures directory (required with --require-pdb)",
+    )
+    snapshot.add_argument(
+        "--model-version",
+        default="6",
+        help="AlphaFold model version used in AF-<acc>-F1-model_vN filenames",
+    )
+    snapshot.add_argument(
+        "--skipped-output",
+        type=Path,
+        default=None,
+        help="Write accessions skipped by --require-pdb (reason-coded lines)",
+    )
     snapshot.add_argument("-o", "--output", type=Path, required=True, help="Snapshot output path")
     snapshot.add_argument("--limit", type=int, default=MAX_ARRAY_TASKS)
 
@@ -198,6 +492,33 @@ def main() -> None:
     )
     dedupe.add_argument("accession_file", type=Path)
 
+    summarize = subparsers.add_parser(
+        "summarize-failures",
+        help="Summarize reason-coded Rockfish failure logs (counts by reason_code)",
+    )
+    summarize.add_argument(
+        "failed_log",
+        type=Path,
+        help="failed_pocket.txt / failed_accessions.txt (accession[\\treason[\\tdetail]])",
+    )
+    summarize.add_argument(
+        "--json-output",
+        type=Path,
+        default=None,
+        help="Optional path to write a JSON summary of counts and records",
+    )
+    summarize.add_argument(
+        "--reason",
+        default=None,
+        help="If set with --write-accessions, export accessions matching this reason_code",
+    )
+    summarize.add_argument(
+        "--write-accessions",
+        type=Path,
+        default=None,
+        help="Write accessions for --reason (one per line) for targeted retries",
+    )
+
     args = parser.parse_args()
 
     if args.command == "prepare":
@@ -205,19 +526,43 @@ def main() -> None:
         return
 
     if args.command == "write-snapshot":
+        if args.retry_failed and args.retry_failed_only:
+            msg = "Use only one of --retry-failed or --retry-failed-only"
+            raise SystemExit(msg)
         _run_snapshot_command(args)
         return
 
     if args.command == "dedupe-file":
         _run_dedupe_command(args)
+        return
+
+    if args.command == "summarize-failures":
+        if args.write_accessions is not None and args.reason is None:
+            msg = "--write-accessions requires --reason"
+            raise SystemExit(msg)
+        _run_summarize_failures_command(args)
 
 
 def main_prepare() -> None:
     """Console entry for prepare-rockfish-accessions (prepare subcommand only)."""
-    if len(sys.argv) > 1 and sys.argv[1] in {"prepare", "write-snapshot", "dedupe-file"}:
+    if len(sys.argv) > 1 and sys.argv[1] in {
+        "prepare",
+        "write-snapshot",
+        "dedupe-file",
+        "summarize-failures",
+    }:
         main()
         return
     sys.argv.insert(1, "prepare")
+    main()
+
+
+def main_summarize_failures() -> None:
+    """Console entry for summarize-rockfish-failures."""
+    if len(sys.argv) > 1 and sys.argv[1] == "summarize-failures":
+        main()
+        return
+    sys.argv.insert(1, "summarize-failures")
     main()
 
 

@@ -23,7 +23,7 @@ from scripts.merge_all_features import (
     write_merged_all_csv,
 )
 from scripts.merge_all_features import main as merge_all_main
-from scripts.merge_features import POCKET_DATA_COLUMNS, iter_fetch_records
+from scripts.merge_features import POCKET_DATA_COLUMNS, FetchRecord, iter_fetch_records
 
 
 def _pocket_row(
@@ -203,7 +203,8 @@ def test_outer_join_all_sources() -> None:
             pocket_by_accession=pocket_by_accession,
             jdp_by_accession=jdp_by_accession,
             jdp_identity_by_accession=jdp_identity_by_accession,
-            provided_sources={"dnak": True, "dnaj": True, "pocket": True, "jdp": True},
+            motif_by_accession={},
+            provided_sources={"dnak": True, "dnaj": True, "pocket": True, "jdp": True, "motif": False},
             join="outer",
         ),
     )
@@ -218,6 +219,46 @@ def test_outer_join_all_sources() -> None:
     assert by_accession["P0ACJ8"]["dnaj_architecture_ida"] == "PF00226:IPR001623-PF01556:IPR001623"
     assert by_accession["P08113"]["charge_inversion_candidate"] == "true"
     assert by_accession["P99999"]["has_pocket_charge"] == "false"
+    assert by_accession["P0ACJ8"]["chaperone_system_membership"] == "dnaj"
+    assert by_accession["P0A6Y8"]["chaperone_system_membership"] == "dnak"
+    assert by_accession["P0ACJ8"]["unified_confidence_tier"] == "high"
+    assert "jdp_class_a" in by_accession["P0ACJ8"]["classification_tags"]
+
+
+def test_dual_homolog_gets_dual_membership_and_unified_tier() -> None:
+    """Accessions in both fetches are labeled dual with combined confidence."""
+    dnak_records = iter_fetch_records(_dnak_fetch())
+    dnaj_records = iter_fetch_records(_dnaj_fetch())
+    pocket_by_accession = _pocket_index({"P0ACJ8": _pocket_row("P0ACJ8", mapping_confidence="medium")})
+    jdp_by_accession, jdp_identity_by_accession = _jdp_indexes([_jdp_row("P0ACJ8", predicted_class="A")])
+    template = dnak_records[0]
+    dual_dnak_record = FetchRecord(
+        accession="P0ACJ8",
+        protein_name=template.protein_name,
+        protein_length=template.protein_length,
+        source_database=template.source_database,
+        fetch_source="dnak",
+        architecture_ida="",
+        architecture_ida_id="",
+        appears_in_architecture_count="",
+    )
+
+    merged = merge_all_features(
+        MergeAllInputs(
+            dnak_by_accession={record.accession: record for record in dnak_records} | {"P0ACJ8": dual_dnak_record},
+            dnaj_by_accession={record.accession: record for record in dnaj_records},
+            pocket_by_accession=pocket_by_accession,
+            jdp_by_accession=jdp_by_accession,
+            jdp_identity_by_accession=jdp_identity_by_accession,
+            motif_by_accession={},
+            provided_sources={"dnak": True, "dnaj": True, "pocket": True, "jdp": True, "motif": False},
+            join="outer",
+        ),
+    )
+    by_accession = {row["accession"]: row for row in merged}
+    assert by_accession["P0ACJ8"]["chaperone_system_membership"] == "dual"
+    assert by_accession["P0ACJ8"]["unified_confidence_tier"] == "medium"
+    assert "dual_chaperone_homolog" in by_accession["P0ACJ8"]["classification_tags"]
 
 
 def test_inner_join_requires_all_provided_sources() -> None:
@@ -237,7 +278,8 @@ def test_inner_join_requires_all_provided_sources() -> None:
             pocket_by_accession=pocket_by_accession,
             jdp_by_accession={},
             jdp_identity_by_accession={},
-            provided_sources={"dnak": True, "dnaj": False, "pocket": True, "jdp": False},
+            motif_by_accession={},
+            provided_sources={"dnak": True, "dnaj": False, "pocket": True, "jdp": False, "motif": False},
             join="inner",
         ),
     )
@@ -258,7 +300,8 @@ def test_pocket_quality_flags_renamed() -> None:
             pocket_by_accession=pocket_by_accession,
             jdp_by_accession={},
             jdp_identity_by_accession={},
-            provided_sources={"dnak": False, "dnaj": False, "pocket": True, "jdp": False},
+            motif_by_accession={},
+            provided_sources={"dnak": False, "dnaj": False, "pocket": True, "jdp": False, "motif": False},
             join="outer",
         ),
     )
@@ -288,7 +331,8 @@ def test_write_merged_all_csv_roundtrip(tmp_path: Path) -> None:
             pocket_by_accession=pocket_by_accession,
             jdp_by_accession={},
             jdp_identity_by_accession={},
-            provided_sources={"dnak": False, "dnaj": False, "pocket": True, "jdp": False},
+            motif_by_accession={},
+            provided_sources={"dnak": False, "dnaj": False, "pocket": True, "jdp": False, "motif": False},
             join="outer",
         ),
     )

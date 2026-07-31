@@ -5,15 +5,23 @@
 # Usage (from project root on Rockfish):
 #   prepare-rockfish-accessions ipr012725_proteins.json --wk-dir "${WK_DIR}"
 #   bash scripts/slurm/submit_affetch_rockfish.sh
+#
+# Failed accessions in failed_accessions.txt are skipped by default.
+# To retry them: RETRY_FAILED=1 bash scripts/slurm/submit_affetch_rockfish.sh
+#
+# For pocket charge downstream, prefer FILE_TYPE including PDB, e.g.:
+#   FILE_TYPE=pz bash scripts/slurm/submit_affetch_rockfish.sh
 
 WK_DIR="${WK_DIR:-${HOME}/scr4_sfried3/alphafoldfetch}"
 PROJECT_DIR="${PROJECT_DIR:-${HOME}/repositories/20260601_reu_project}"
 INPUT_FILE="${WK_DIR}/incomplete_accessions.txt"
 COMPLETION_LOG="${WK_DIR}/completed_accessions.txt"
+FAILED_LOG="${WK_DIR}/failed_accessions.txt"
 ARRAY_CONCURRENCY="${ARRAY_CONCURRENCY:-128}"
 JOB_SCRIPT="${PROJECT_DIR}/scripts/slurm/affetch_rockfish.sh"
 SNAPSHOT_DIR="${WK_DIR}/array_queues"
 MAX_ARRAY_TASKS=10000
+RETRY_FAILED="${RETRY_FAILED:-0}"
 
 [[ -f ${INPUT_FILE} ]] || {
 	printf "Input file not found: %s\n" "${INPUT_FILE}" 1>&2
@@ -28,7 +36,7 @@ MAX_ARRAY_TASKS=10000
 }
 
 mkdir -p "${WK_DIR}" "${SNAPSHOT_DIR}"
-touch "${COMPLETION_LOG}"
+touch "${COMPLETION_LOG}" "${FAILED_LOG}"
 
 cd "${PROJECT_DIR}" || exit 1
 
@@ -43,22 +51,30 @@ if [[ ${input_count} -eq 0 ]]; then
 	exit 1
 fi
 
-pending_count="$(
-	comm -23 <(awk 'NF' "${INPUT_FILE}" | sort -u) <(awk 'NF' "${COMPLETION_LOG}" | sort -u) | wc -l | awk '{print $1}'
-)"
+SNAPSHOT="${SNAPSHOT_DIR}/affetch_$(date +%Y%m%d_%H%M%S).txt"
 
-if [[ ${pending_count} -eq 0 ]]; then
-	printf "All %s accession(s) in %s are already listed in %s.\n" \
-		"${input_count}" "${INPUT_FILE}" "${COMPLETION_LOG}" 1>&2
-	exit 0
+snapshot_args=(
+	write-snapshot
+	--input "${INPUT_FILE}"
+	--completed "${COMPLETION_LOG}"
+	--failed "${FAILED_LOG}"
+	-o "${SNAPSHOT}"
+	--limit "${MAX_ARRAY_TASKS}"
+)
+
+if [[ ${RETRY_FAILED} == "1" ]]; then
+	snapshot_args+=(--retry-failed)
 fi
 
-SNAPSHOT="${SNAPSHOT_DIR}/affetch_$(date +%Y%m%d_%H%M%S).txt"
-python -m scripts.rockfish_queue write-snapshot \
-	--input "${INPUT_FILE}" \
-	--completed "${COMPLETION_LOG}" \
-	-o "${SNAPSHOT}" \
-	--limit "${MAX_ARRAY_TASKS}"
+set +e
+python -m scripts.rockfish_queue "${snapshot_args[@]}"
+snapshot_status=$?
+set -e
+
+if [[ ${snapshot_status} -ne 0 ]]; then
+	printf "No pending affetch accessions to submit (after excluding completed/failed).\n" 1>&2
+	exit 0
+fi
 
 pending_count="$(wc -l < "${SNAPSHOT}" | awk '{print $1}')"
 

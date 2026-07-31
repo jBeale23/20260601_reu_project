@@ -26,7 +26,7 @@ rockfish_mark_completed() {
 
 	exec 9>> "${lock_file}"
 	flock -x 9
-	if ! grep -qxF "${accession}" "${completion_log}" 2> /dev/null; then
+	if ! awk -F '\t' -v acc="${accession}" '$1 == acc { found = 1 } END { exit !found }' "${completion_log}" 2> /dev/null; then
 		printf "%s\n" "${accession}" >> "${completion_log}"
 	fi
 }
@@ -41,25 +41,28 @@ rockfish_structure_exists() {
 	[[ -f ${base}.pdb.gz || -f ${base}.pdb || -f ${base}.cif.gz || -f ${base}.cif ]]
 }
 
-# True when accession already listed in completion log.
+# True when accession already listed in completion log (first column).
 rockfish_is_completed() {
 	local accession="$1"
 	local completion_log="$2"
-	grep -qxF "${accession}" "${completion_log}" 2> /dev/null
+	awk -F '\t' -v acc="${accession}" '$1 == acc { found = 1 } END { exit !found }' "${completion_log}" 2> /dev/null
 }
 
-# Append accession to a failed log once (atomic).
+# Append accession (+ optional reason) to a failed log once (atomic).
+# Format: accession<TAB>reason_code<TAB>detail
 rockfish_log_failure() {
 	local accession="$1"
 	local failed_log="$2"
 	local lock_file="$3"
+	local reason_code="${4:-unknown}"
+	local detail="${5:-}"
 
 	[[ -n ${accession} ]] || return 0
 
 	exec 8>> "${lock_file}"
 	flock -x 8
-	if ! grep -qxF "${accession}" "${failed_log}" 2> /dev/null; then
-		printf "%s\n" "${accession}" >> "${failed_log}"
+	if ! awk -F '\t' -v acc="${accession}" '$1 == acc { found = 1 } END { exit !found }' "${failed_log}" 2> /dev/null; then
+		printf "%s\t%s\t%s\n" "${accession}" "${reason_code}" "${detail}" >> "${failed_log}"
 	fi
 }
 
@@ -93,4 +96,28 @@ rockfish_resolve_structure() {
 	elif [[ -f ${base}.cif ]]; then
 		printf "%s\n" "${base}.cif"
 	fi
+}
+
+# Classify why a PDB is missing for pocket analysis. Prints reason_code to stdout.
+# Exports ROCKFISH_MISSING_DETAIL with a human-readable message for the caller.
+rockfish_diagnose_missing_pdb() {
+	local accession="$1"
+	local structures_dir="$2"
+	local model_version="$3"
+	local base="${structures_dir}/AF-${accession}-F1-model_v${model_version}"
+
+	if [[ -f ${base}.cif.gz || -f ${base}.cif ]]; then
+		export ROCKFISH_MISSING_DETAIL="CIF present but PDB required for pocket charge; re-fetch with FILE_TYPE including p (e.g. pz or pcz)"
+		printf "cif_only\n"
+		return 0
+	fi
+
+	if [[ -f ${base}.pdb.gz || -f ${base}.pdb ]]; then
+		export ROCKFISH_MISSING_DETAIL="PDB path unexpectedly unresolved for ${base}"
+		printf "missing_pdb\n"
+		return 0
+	fi
+
+	export ROCKFISH_MISSING_DETAIL="No AF PDB/CIF under ${structures_dir} for model v${model_version}"
+	printf "missing_any_structure\n"
 }

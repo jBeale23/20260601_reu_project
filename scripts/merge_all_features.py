@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from jdp_classifier.classify import JDP_DATA_COLUMNS, JDP_SOURCE_COLUMNS
+from scripts.chaperone_profiles import ChaperonePresence, derive_chaperone_classification_fields
 from scripts.extract_uniprot_ids import fetch_warnings
 from scripts.merge_features import (
     POCKET_DATA_COLUMNS,
@@ -31,6 +32,7 @@ class SourcePresence:
     has_dnaj: bool
     has_pocket: bool
     has_jdp: bool
+    has_motif: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +44,7 @@ class MergeAllInputs:
     pocket_by_accession: dict[str, dict[str, str]]
     jdp_by_accession: dict[str, dict[str, str]]
     jdp_identity_by_accession: dict[str, dict[str, str]]
+    motif_by_accession: dict[str, dict[str, str]]
     provided_sources: dict[str, bool]
     join: JoinMode = "outer"
 
@@ -64,10 +67,22 @@ POCKET_OUTPUT_COLUMNS = [
     column if column != "quality_flags" else "pocket_quality_flags" for column in POCKET_DATA_COLUMNS
 ]
 
+MOTIF_DATA_COLUMNS = [
+    "motif_domain_families",
+    "motif_block_grammars",
+    "motif_best_window_lengths",
+    "motif_net_charges",
+    "motif_window_net_charges",
+]
+
 DERIVED_COLUMNS = [
     "has_pocket_charge",
     "has_jdp_classification",
+    "has_motif_features",
     "charge_inversion_candidate",
+    "chaperone_system_membership",
+    "unified_confidence_tier",
+    "classification_tags",
 ]
 
 OUTPUT_COLUMNS = [
@@ -75,6 +90,7 @@ OUTPUT_COLUMNS = [
     *DNAJ_ARCHITECTURE_COLUMNS,
     *POCKET_OUTPUT_COLUMNS,
     *JDP_DATA_COLUMNS,
+    *MOTIF_DATA_COLUMNS,
     *DERIVED_COLUMNS,
 ]
 
@@ -117,6 +133,33 @@ def load_jdp_table(csv_path: Path) -> tuple[dict[str, dict[str, str]], dict[str,
     return jdp_by_accession, identity_by_accession
 
 
+def load_motif_table(csv_path: Path) -> dict[str, dict[str, str]]:
+    """Aggregate motif_accession_features.csv rows by accession."""
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        if reader.fieldnames is None or "accession" not in reader.fieldnames:
+            msg = f"Motif CSV missing accession column: {csv_path}"
+            raise ValueError(msg)
+
+        grouped: dict[str, list[dict[str, str]]] = {}
+        for row in reader:
+            accession = (row.get("accession") or "").strip()
+            if not accession:
+                continue
+            grouped.setdefault(accession, []).append(row)
+
+    aggregated: dict[str, dict[str, str]] = {}
+    for accession, rows in grouped.items():
+        aggregated[accession] = {
+            "motif_domain_families": ";".join(row.get("domain_family", "") for row in rows),
+            "motif_block_grammars": ";".join(row.get("block_grammar", "") for row in rows),
+            "motif_best_window_lengths": ";".join(str(row.get("best_window_length", "")) for row in rows),
+            "motif_net_charges": ";".join(str(row.get("net_charge", "")) for row in rows),
+            "motif_window_net_charges": ";".join(str(row.get("window_net_charge", "")) for row in rows),
+        }
+    return aggregated
+
+
 def _records_by_accession(records: list[FetchRecord]) -> dict[str, FetchRecord]:
     return {record.accession: record for record in records}
 
@@ -153,6 +196,10 @@ def _empty_jdp_row() -> dict[str, str]:
     return dict.fromkeys(JDP_DATA_COLUMNS, "")
 
 
+def _empty_motif_row() -> dict[str, str]:
+    return dict.fromkeys(MOTIF_DATA_COLUMNS, "")
+
+
 def _fetch_sources_for_accession(*, has_dnak: bool, has_dnaj: bool) -> str:
     sources: list[str] = []
     if has_dnak:
@@ -172,6 +219,7 @@ def _passes_inner_join(
         "dnaj": presence.has_dnaj,
         "pocket": presence.has_pocket,
         "jdp": presence.has_jdp,
+        "motif": presence.has_motif,
     }
     return all(presence_by_source[source] for source, is_provided in provided_sources.items() if is_provided)
 
@@ -182,7 +230,8 @@ def merge_all_features(inputs: MergeAllInputs) -> list[dict[str, str]]:
         set(inputs.dnak_by_accession)
         | set(inputs.dnaj_by_accession)
         | set(inputs.pocket_by_accession)
-        | set(inputs.jdp_by_accession),
+        | set(inputs.jdp_by_accession)
+        | set(inputs.motif_by_accession),
     )
 
     merged_rows: list[dict[str, str]] = []
@@ -191,12 +240,14 @@ def merge_all_features(inputs: MergeAllInputs) -> list[dict[str, str]]:
         dnaj_record = inputs.dnaj_by_accession.get(accession)
         pocket_row = inputs.pocket_by_accession.get(accession)
         jdp_row = inputs.jdp_by_accession.get(accession)
+        motif_row = inputs.motif_by_accession.get(accession)
 
         presence = SourcePresence(
             has_dnak=dnak_record is not None,
             has_dnaj=dnaj_record is not None,
             has_pocket=pocket_row is not None,
             has_jdp=jdp_row is not None,
+            has_motif=motif_row is not None,
         )
 
         if inputs.join == "inner" and not _passes_inner_join(
@@ -225,6 +276,7 @@ def merge_all_features(inputs: MergeAllInputs) -> list[dict[str, str]]:
             "dnaj_appears_in_architecture_count": (dnaj_record.appears_in_architecture_count if dnaj_record else ""),
             "has_pocket_charge": "true" if presence.has_pocket else "false",
             "has_jdp_classification": "true" if presence.has_jdp else "false",
+            "has_motif_features": "true" if presence.has_motif else "false",
             "charge_inversion_candidate": "false",
         }
 
@@ -240,6 +292,29 @@ def merge_all_features(inputs: MergeAllInputs) -> list[dict[str, str]]:
             row.update(jdp_row)
         else:
             row.update(_empty_jdp_row())
+
+        if presence.has_motif and motif_row is not None:
+            row.update(motif_row)
+        else:
+            row.update(_empty_motif_row())
+
+        charge_inversion = row["charge_inversion_candidate"] == "true"
+        jdp_fields = {column: row.get(column, "") for column in JDP_DATA_COLUMNS}
+        pocket_fields = {column: row.get(column, "") for column in POCKET_OUTPUT_COLUMNS}
+        row.update(
+            derive_chaperone_classification_fields(
+                presence=ChaperonePresence(
+                    has_dnak=presence.has_dnak,
+                    has_dnaj=presence.has_dnaj,
+                    has_jdp=presence.has_jdp,
+                    has_pocket=presence.has_pocket,
+                    has_motif=presence.has_motif,
+                    charge_inversion_candidate=charge_inversion,
+                ),
+                jdp_row=jdp_fields,
+                pocket_row=pocket_fields,
+            ),
+        )
 
         merged_rows.append(row)
 
@@ -269,6 +344,7 @@ def _load_merge_inputs(args: argparse.Namespace) -> MergeAllInputs:
     pocket_by_accession: dict[str, dict[str, str]] = {}
     jdp_by_accession: dict[str, dict[str, str]] = {}
     jdp_identity_by_accession: dict[str, dict[str, str]] = {}
+    motif_by_accession: dict[str, dict[str, str]] = {}
 
     if args.dnak_json is not None:
         dnak_data = _load_fetch_json(args.dnak_json)
@@ -288,17 +364,22 @@ def _load_merge_inputs(args: argparse.Namespace) -> MergeAllInputs:
     if args.jdp_csv is not None:
         jdp_by_accession, jdp_identity_by_accession = load_jdp_table(args.jdp_csv)
 
+    if args.motif_csv is not None:
+        motif_by_accession = load_motif_table(args.motif_csv)
+
     return MergeAllInputs(
         dnak_by_accession=dnak_by_accession,
         dnaj_by_accession=dnaj_by_accession,
         pocket_by_accession=pocket_by_accession,
         jdp_by_accession=jdp_by_accession,
         jdp_identity_by_accession=jdp_identity_by_accession,
+        motif_by_accession=motif_by_accession,
         provided_sources={
             "dnak": args.dnak_json is not None,
             "dnaj": args.dnaj_json is not None,
             "pocket": args.pocket_csv is not None,
             "jdp": args.jdp_csv is not None,
+            "motif": args.motif_csv is not None,
         },
         join=args.join,
     )
@@ -331,6 +412,12 @@ def main() -> None:
         help="jdp_classifications.csv from classify-jdp",
     )
     parser.add_argument(
+        "--motif-csv",
+        type=Path,
+        default=None,
+        help="motif_accession_features.csv from analyze-motif-conservation",
+    )
+    parser.add_argument(
         "--join",
         choices=("outer", "inner"),
         default="outer",
@@ -338,14 +425,17 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if not any([args.dnak_json, args.dnaj_json, args.pocket_csv, args.jdp_csv]):
-        parser.error("At least one input (--dnak-json, --dnaj-json, --pocket-csv, --jdp-csv) is required.")
+    if not any([args.dnak_json, args.dnaj_json, args.pocket_csv, args.jdp_csv, args.motif_csv]):
+        parser.error(
+            "At least one input (--dnak-json, --dnaj-json, --pocket-csv, --jdp-csv, --motif-csv) is required.",
+        )
 
     for path, label in [
         (args.dnak_json, "DnaK JSON"),
         (args.dnaj_json, "DnaJ JSON"),
         (args.pocket_csv, "pocket CSV"),
         (args.jdp_csv, "JDP CSV"),
+        (args.motif_csv, "motif CSV"),
     ]:
         if path is not None and not path.is_file():
             parser.error(f"{label} not found: {path}")
@@ -360,10 +450,12 @@ def main() -> None:
 
     with_pocket = sum(1 for row in merged_rows if row["has_pocket_charge"] == "true")
     with_jdp = sum(1 for row in merged_rows if row["has_jdp_classification"] == "true")
+    with_motif = sum(1 for row in merged_rows if row["has_motif_features"] == "true")
     sys.stderr.write(
         f"Merged {len(merged_rows)} row(s): "
         f"{len(merge_inputs.dnak_by_accession)} DnaK fetch, {len(merge_inputs.dnaj_by_accession)} DnaJ fetch, "
-        f"{with_pocket} with pocket data, {with_jdp} with JDP classification.\n",
+        f"{with_pocket} with pocket data, {with_jdp} with JDP classification, "
+        f"{with_motif} with motif features.\n",
     )
     sys.stderr.write(f"Wrote {args.output}\n")
 

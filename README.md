@@ -358,11 +358,24 @@ For DnaJ classifications and a unified table, see [Unified feature table](#unifi
 | `${WK_DIR}/incomplete_accessions.txt` | Master deduped accession list (from `prepare-rockfish-accessions`) |
 | `${WK_DIR}/array_queues/*.txt` | Fixed per-submission snapshots (do not edit) |
 | `${WK_DIR}/completed_accessions.txt` | Affetch finished IDs |
-| `${WK_DIR}/failed_accessions.txt` | Affetch failures (retry candidates) |
+| `${WK_DIR}/failed_accessions.txt` | Affetch failures (skipped on resubmit unless `RETRY_FAILED=1`) |
 | `${WK_DIR}/completed_pocket.txt` | Pocket analysis finished IDs |
+| `${WK_DIR}/failed_pocket.txt` | Pocket failures with `accession<TAB>reason_code<TAB>detail` (skipped unless `RETRY_FAILED=1`) |
 | `${WK_DIR}/structures/` | AlphaFold PDB/CIF files from affetch |
 | `${WK_DIR}/pocket_results/` | Per-accession pocket JSON + summary CSV |
+| `${WK_DIR}/motif_results/` | DnaJ conserved charge / motif window outputs |
 | `${WK_DIR}/logs/` | SLURM stdout/stderr per array task |
+
+**Queue rules:** pending = incomplete − completed − failed (failed excluded by default). Retry known failures with `RETRY_FAILED=1`. Pocket submit also runs a **PDB preflight** (`REQUIRE_PDB=1` by default) so CIF-only or missing structures are written to a skipped log instead of filling a doomed 10k array.
+
+After a large array finishes, summarize why tasks failed:
+
+```bash
+summarize-rockfish-failures "${WK_DIR}/failed_pocket.txt"
+summarize-rockfish-failures "${WK_DIR}/failed_pocket.txt" \
+  --json-output "${WK_DIR}/failed_pocket_summary.json" \
+  --reason cif_only --write-accessions "${WK_DIR}/retry_cif_only.txt"
+```
 
 ### Troubleshooting duplicate or repeated jobs
 
@@ -471,7 +484,8 @@ Optional environment variables for the launcher and job script:
 | `ARRAY_QUEUE_FILE` | (set by launcher) | Fixed accession snapshot for this array job |
 | `SLURM_ACCOUNT` | (from job script) | Override SLURM account at submit time, e.g. `export SLURM_ACCOUNT=your_account` |
 | `ARRAY_CONCURRENCY` | `128` | Max concurrent array tasks (`%` cap in `sbatch --array`) |
-| `FILE_TYPE` | `pcz` | `affetch -f` format: `p`=PDB, `c`=CIF, `z`=gzip |
+| `FILE_TYPE` | `pcz` | `affetch -f` format: `p`=PDB, `c`=CIF, `z`=gzip. Pocket charge needs PDB; use `pz` or keep `p` in the format. CIF-only downloads are logged as `cif_only` failures. |
+| `RETRY_FAILED` | `0` | Set to `1` to re-queue IDs listed in `failed_accessions.txt` |
 | `MODEL_VERSION` | `6` | AlphaFold model version |
 | `CONDA_ENV` | `${HOME}/affetch` | Conda env path for affetch |
 
@@ -515,7 +529,7 @@ The launcher writes a fixed snapshot and submits `sbatch --array=1-N%128`. Same 
 | `ARRAY_CONCURRENCY` | `128` | Max concurrent array tasks |
 | `CONDA_ENV` | `${HOME}/pocket` | Conda env path with structure extras |
 
-Completed accessions are logged to `completed_pocket.txt`; failures to `failed_pocket.txt`. Re-submitting skips finished IDs. Tasks skip if output JSON already exists.
+Completed accessions are logged to `completed_pocket.txt`; failures to `failed_pocket.txt` as `accession<TAB>reason_code<TAB>detail` (e.g. `missing_pdb`, `cif_only`, `missing_any_structure`, `analyze_nonzero`). Re-submitting skips completed **and** failed IDs by default. Set `RETRY_FAILED=1` to include failures again. PDB preflight (`REQUIRE_PDB=1`) drops CIF-only / missing structures at submit time into `array_queues/pocket_skipped_no_pdb_*.txt`. Tasks skip if output JSON already exists.
 
 ### 3. Merge results and join with InterPro fetch
 
@@ -775,7 +789,36 @@ Per-accession JSON is always written in batch mode; `--min-confidence` filters o
 Yeast (`P08113`) now receives **mapping: high** despite 18% contact identity — the charge shift (+2 contact) is flagged `charge_inversion_candidate` rather than buried under a single low tier. Thermophile `P61889` remains **mapping: low** (full-length fallback, poor geometry).
 
 Validation details: [`docs/pocket_validation.md`](docs/pocket_validation.md). Pocket definition: [`data/pocket_refs/dnak_sbd_pocket.yaml`](data/pocket_refs/dnak_sbd_pocket.yaml).
-Each array task downloads structures for **one** accession from its snapshot line. Completed accessions are logged to `completed_accessions.txt`; failed downloads go to `failed_accessions.txt`. Completion logging uses file locks to avoid duplicate log lines. Per-task SLURM stdout/stderr are written to `${WK_DIR}/logs/affetch_<jobid>_<taskid>.out` and `.err`.
+
+## DnaJ conserved charge / motif windows
+
+Align DnaJ domain families (J-domain, DnaJ C, zinc-finger-like, G/F-rich), sweep sliding-window charge conservation across homologs, and segment IDR/G/F-like regions into compositional block grammars (compression/entropy proxy for Kolmogorov complexity). Window length is chosen by **cross-homolog conservation**, not by DnaK charge-inversion labels (those are a held-out sanity check only).
+
+```bash
+pip install -e ".[structure]"
+analyze-motif-conservation ipr001623_domain_architectures_no_dedup.json -o motif_results
+merge-all-features --dnaj-json ipr001623_domain_architectures_no_dedup.json \
+  --motif-csv motif_results/motif_accession_features.csv \
+  -o merged_features/dnaj_with_motif.csv
+```
+
+Optional held-out overlap with pocket charge-inversion candidates:
+
+```bash
+analyze-motif-conservation ipr001623_domain_architectures_no_dedup.json -o motif_results \
+  --held-out-pocket-csv pocket_results/pocket_charge_summary.csv
+```
+
+### Rockfish
+
+Uses the `pocket` conda env (sequence + Biopython; no PDB required for this job):
+
+```bash
+export FETCH_JSON="${WK_DIR}/ipr001623_domain_architectures_no_dedup.json"
+bash scripts/slurm/submit_analyze_motif_rockfish.sh
+```
+
+Outputs land in `${WK_DIR}/motif_results/` (`motif_family_summary.csv`, `motif_accession_features.csv`, `motif_conservation_curves.json`).
 
 Structures are written to `${WK_DIR}/structures/` as `AF-<accession>-F1-model_v6.pdb.gz` (and `.cif.gz` by default).
 
@@ -786,7 +829,7 @@ Structures are written to `${WK_DIR}/structures/` as `AF-<accession>-F1-model_v6
 | `${WK_DIR}/incomplete_accessions.txt` | Master deduped accession list (from `prepare-rockfish-accessions`) |
 | `${WK_DIR}/array_queues/*.txt` | Fixed per-submission snapshots (do not edit) |
 | `${WK_DIR}/completed_accessions.txt` | Affetch finished IDs |
-| `${WK_DIR}/failed_accessions.txt` | Affetch failures (retry candidates) |
+| `${WK_DIR}/failed_accessions.txt` | Affetch failures (skipped on resubmit unless `RETRY_FAILED=1`) |
 | `${WK_DIR}/structures/` | AlphaFold PDB/CIF files from affetch |
 | `${WK_DIR}/logs/` | SLURM stdout/stderr per array task |
 
@@ -874,6 +917,15 @@ jdp_classifier/
   localization.py               # TM/signal peptide from InterPro + UniProt features
   rules.py                      # Class A/B/C rules, layout tags, confidence tiers
   sequence.py                   # J-domain sequence extraction + UniProt fallback
+motif_conservation/
+  analyze.py                    # DnaJ family motif / charge-window orchestration
+  alignment_frames.py           # Progressive MSA for structured domain families
+  charge_alphabet.py            # Formal charge and composition alphabets
+  cli.py                        # analyze-motif-conservation console entry
+  families.py                   # Domain slice extraction from InterPro JSON
+  idr_blocks.py                 # Complexity-adaptive IDR/G/F block grammars
+  transfer.py                   # Held-out DnaK charge-inversion overlap check
+  windows.py                    # Sliding-window charge conservation sweep
 docs/
   pocket_validation.md          # 1DKX round-trip and v3 dev-set validation
   jdp_classifier_calibration.md # v1 sanity checks and expected classifications
@@ -881,15 +933,17 @@ scripts/
   extract_uniprot_ids.py        # UniProt ID extraction for AlphaFoldFetch
   rockfish_queue.py             # Dedupe, validate counts, write array snapshots
   merge_features.py             # Join InterPro fetch JSON with pocket charge CSV
-  merge_all_features.py         # Join DnaK/DnaJ fetch, pocket CSV, and JDP CSV
+  merge_all_features.py         # Join DnaK/DnaJ fetch, pocket, JDP, and motif CSVs
   slurm/
     affetch_rockfish.sh         # Rockfish array job for affetch
     submit_affetch_rockfish.sh  # Launcher: sets array bounds and submits job
     analyze_pocket_rockfish.sh  # Rockfish array job for pocket-charge analysis
     submit_analyze_pocket_rockfish.sh  # Launcher for pocket-charge array job
+    analyze_motif_rockfish.sh   # Rockfish job for DnaJ motif / charge windows
+    submit_analyze_motif_rockfish.sh
     rockfish_common.sh          # Shared snapshot/locking helpers for array workers
     conda_env.yaml              # Pinned conda env for affetch on Rockfish
-    conda_env_pocket.yaml       # Conda env for analyze-pocket-charge on Rockfish
+    conda_env_pocket.yaml       # Conda env for analyze-pocket-charge / motif on Rockfish
 tests/
   test_fetch_dnaj.py
   test_fetch_dnak.py
