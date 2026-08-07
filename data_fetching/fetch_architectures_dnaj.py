@@ -60,6 +60,42 @@ EXPECTED_FIRST_IDA_ID = "500088c3adc88e8af670fe08554083396acf46f3"
 EXPECTED_FIRST_PROTEIN_COUNT = 98256
 
 
+def warn_if_unexpected_first_architecture(architectures: list[ApiResponse]) -> list[str]:
+    """Warn when the architecture list no longer starts where it used to.
+
+    The first group returned by InterPro should be the bare J-domain architecture. A
+    different ``ida_id`` means the ordering or the entry itself changed upstream, which
+    silently changes what ``-n`` selects.
+
+    Args:
+        architectures: Architecture groups as returned by the InterPro API.
+
+    Returns:
+        Human-readable warnings (also emitted through the module logger).
+    """
+    warnings: list[str] = []
+    if not architectures:
+        warnings.append("InterPro returned no architecture groups for IPR001623.")
+    else:
+        first = architectures[0]
+        first_ida_id = str(first.get("ida_id", ""))
+        if first_ida_id != EXPECTED_FIRST_IDA_ID:
+            warnings.append(
+                f"First architecture is {first_ida_id or '<missing>'}, expected {EXPECTED_FIRST_IDA_ID}; "
+                f"InterPro ordering may have changed.",
+            )
+        reported = int(first.get("unique_proteins") or 0)
+        if reported and abs(reported - EXPECTED_FIRST_PROTEIN_COUNT) > EXPECTED_FIRST_PROTEIN_COUNT // 10:
+            warnings.append(
+                f"First architecture reports {reported} unique proteins, "
+                f"more than 10% away from the recorded {EXPECTED_FIRST_PROTEIN_COUNT}.",
+            )
+
+    for warning in warnings:
+        logger.warning("%s", warning)
+    return warnings
+
+
 async def fetch_proteins_for_arch(
     session: aiohttp.ClientSession,
     arch: ApiResponse,
@@ -162,6 +198,7 @@ async def main() -> None:
         validate_api_response(arch_data)
         architectures: list[ApiResponse] = arch_data.get("results", [])[:n_architectures]
         logger.info("Got %s architecture group(s).", len(architectures))
+        warn_if_unexpected_first_architecture(architectures)
 
         logger.info("Fetching proteins...")
         tasks = [

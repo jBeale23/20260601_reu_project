@@ -26,6 +26,8 @@ Thumbs.db
 
 # InterPro fetch + pocket charge JSON (default CLI outputs)
 *.json
+# Curated reference data is tracked (bundled with the package)
+!data/reference_jdps/*.json
 
 # Rockfish work directory outputs (under WK_DIR on cluster or local test runs)
 array_queues/

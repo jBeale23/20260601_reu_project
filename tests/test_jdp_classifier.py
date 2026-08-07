@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import sys
 from typing import TYPE_CHECKING
@@ -10,9 +11,13 @@ from unittest.mock import patch
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from domain_layout.records import ProteinDomainRecord
+
+from domain_layout.records import DomainStore, write_domain_store
 from jdp_classifier.architecture import features_from_ida, j_domain_position, parse_ida
 from jdp_classifier.classify import ProteinArchitectureInput, classify_fetch_json, classify_protein
 from jdp_classifier.cli import main as classify_main
+from jdp_classifier.domain_evidence import enrich_protein, ida_from_record
 from jdp_classifier.hpd import classify_hpd, has_hpd_motif
 from jdp_classifier.localization import (
     LocalizationResult,
@@ -26,6 +31,7 @@ from jdp_classifier.sequence import (
     extract_j_domain_with_fallback,
     fetch_uniprot_fasta,
 )
+from tests.conftest import make_entry, make_record
 
 
 def _protein_with_j_domain(
@@ -353,10 +359,10 @@ def test_classify_exports_gf_rich_and_layout_tags() -> None:
     assert result.layout_tags == []
 
 
-def test_classify_p0acj8_like_architecture() -> None:
-    """Classic DnaJ-like architecture classifies as A without TM/signal tags."""
+def test_classify_ecoli_dnaj_like_architecture() -> None:
+    """Classic DnaJ-like architecture (P08622) classifies as A without TM/signal tags."""
     protein = _protein_with_j_domain(
-        accession="P0ACJ8",
+        accession="P08622",
         sequence="M" * 20 + "HPD" + "G" * 30,
         start=21,
         end=23,
@@ -373,3 +379,138 @@ def test_classify_p0acj8_like_architecture() -> None:
     assert result.has_transmembrane is False
     assert result.has_signal_peptide is False
     assert "membrane_associated" not in result.layout_tags
+
+
+def test_predict_class_b_from_c_terminal_domain_without_zinc_finger() -> None:
+    """J-domain plus the C-terminal domain and no zinc finger is class B (e.g. DNAJB1)."""
+    features = features_from_ida("PF00226:IPR001623-PF01556:IPR002939")
+    assert predict_class(features) == "B"
+
+
+def test_predict_class_a_needs_the_zinc_finger() -> None:
+    """The zinc-finger-like region is what separates class A from class B."""
+    with_zinc_finger = features_from_ida("PF00226:IPR001623-PF01556:IPR002939-PF00684:IPR001305")
+    assert predict_class(with_zinc_finger) == "A"
+
+
+def test_ida_from_record_orders_pfam_matches_by_position(dnaj_record: ProteinDomainRecord) -> None:
+    """A domain record rebuilds the InterPro IDA string in N-to-C order."""
+    assert ida_from_record(dnaj_record) == ("PF00226:IPR001623-PF01556:IPR002939-PF00684:IPR001305-PF27439")
+
+
+def test_enrich_protein_injects_sequence_and_entries(dnaj_record: ProteinDomainRecord) -> None:
+    """Fetch metadata wins, but the sequence and domain entries come from the store."""
+    protein = {"metadata": {"accession": "P08622", "name": "Fetched name", "length": 376}}
+    enriched = enrich_protein(protein, dnaj_record)
+    assert enriched["metadata"]["name"] == "Fetched name"
+    assert enriched["metadata"]["sequence"].startswith("MAKQ")
+    assert enriched["entries"][0]["accession"] == "PF00226"
+
+
+def test_enrich_protein_without_record_is_a_passthrough() -> None:
+    """Proteins missing from the store are returned unchanged."""
+    protein = {"metadata": {"accession": "P1"}}
+    assert enrich_protein(protein, None) is protein
+
+
+def test_classify_protein_uses_domain_store_offline(dnaj_record: ProteinDomainRecord) -> None:
+    """With a domain store, HPD and architecture resolve without any UniProt request."""
+    store = DomainStore()
+    store.add(dnaj_record)
+    item = ProteinArchitectureInput(
+        protein={"metadata": {"accession": "P08622", "name": "Chaperone protein DnaJ"}},
+        architecture_ida="PF00226:IPR001623",
+        architecture_ida_id="hash-a",
+        appears_in_architecture_count=1,
+    )
+
+    result = classify_protein(item, allow_fetch=False, domain_store=store)
+    assert result.architecture_source == "domain_store"
+    assert result.predicted_class == "A"
+    assert result.has_hpd is True
+    assert result.hpd_source == "interpro"
+    assert result.n_domains == 4
+
+
+def test_classify_protein_keeps_fetch_architecture_when_richer(dnaj_record: ProteinDomainRecord) -> None:
+    """A fetch IDA naming more domains than the store is kept, and labelled as such."""
+    store = DomainStore()
+    store.add(make_record("P08622", dnaj_record.sequence, entries=(make_entry("PF00226", 5, 67),)))
+    item = ProteinArchitectureInput(
+        protein={"metadata": {"accession": "P08622"}},
+        architecture_ida="PF00226:IPR001623-PF01556:IPR002939-PF00684:IPR001305",
+        architecture_ida_id="hash-a",
+        appears_in_architecture_count=1,
+    )
+
+    result = classify_protein(item, allow_fetch=False, domain_store=store)
+    assert result.architecture_source == "fetch"
+    assert result.predicted_class == "A"
+
+
+def test_classify_cli_with_domain_json(tmp_path: Path, dnaj_record: ProteinDomainRecord) -> None:
+    """classify-jdp --domain-json classifies without network access."""
+    store = DomainStore()
+    store.add(dnaj_record)
+    store_path = tmp_path / "domains.json"
+    write_domain_store(store, store_path)
+
+    fetch_json = tmp_path / "fetch.json"
+    fetch_json.write_text(
+        json.dumps(
+            {
+                "architectures": [
+                    {
+                        "ida": "PF00226:IPR001623",
+                        "ida_id": "hash-a",
+                        "proteins": [{"metadata": {"accession": "P08622", "name": "DnaJ"}}],
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "jdp.csv"
+
+    with patch.object(
+        sys,
+        "argv",
+        ["classify-jdp", str(fetch_json), "-o", str(output), "--domain-json", str(store_path), "--no-fetch"],
+    ):
+        classify_main()
+
+    rows = list(csv.DictReader(output.open(encoding="utf-8")))
+    assert len(rows) == 1
+    assert rows[0]["predicted_class"] == "A"
+    assert rows[0]["architecture_source"] == "domain_store"
+    assert rows[0]["has_hpd"] == "true"
+
+
+def test_j_domain_entry_matched_through_integrated_parent() -> None:
+    """A member-database signature integrated into IPR001623 is a J-domain match."""
+    sequence = "M" * 10 + "HPD" + "A" * 40
+    protein = {
+        "metadata": {"accession": "P1", "sequence": sequence},
+        "entries": [
+            {
+                "accession": "SM00271",
+                "integrated": "IPR001623",
+                "entry_protein_locations": [{"fragments": [{"start": 1, "end": 30}]}],
+            },
+        ],
+    }
+    subsequence, coords = extract_j_domain_from_interpro(protein)
+    assert coords == (1, 30)
+    assert subsequence is not None
+    assert has_hpd_motif(subsequence) is True
+
+
+def test_localization_matches_integrated_transmembrane_parent() -> None:
+    """TM evidence is found through a signature's integrated InterPro parent."""
+    protein = {
+        "metadata": {"accession": "P1"},
+        "entries": [{"accession": "PF99999", "integrated": "IPR013938"}],
+    }
+    result = scan_entries_for_localization(protein)
+    assert result.has_transmembrane is True
+    assert result.localization_source == "interpro"

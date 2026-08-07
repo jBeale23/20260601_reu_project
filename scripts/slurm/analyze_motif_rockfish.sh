@@ -20,6 +20,9 @@ PROJECT_DIR="${PROJECT_DIR:-${HOME}/repositories/20260601_reu_project}"
 WK_DIR="${WK_DIR:-${HOME}/scr4_sfried3/alphafoldfetch}"
 RESULTS_DIR="${RESULTS_DIR:-${WK_DIR}/motif_results}"
 CONDA_ENV="${CONDA_ENV:-${HOME}/pocket}"
+MAFFT_MODULE="${MAFFT_MODULE:-mafft/7.525}"
+MSA_BACKEND="${MSA_BACKEND:-auto}"
+MSA_THREADS="${MSA_THREADS:-1}"
 FETCH_JSON="${FETCH_JSON:-${WK_DIR}/ipr001623_domain_architectures_no_dedup.json}"
 MIN_MEMBERS="${MIN_MEMBERS:-3}"
 MAX_PER_FAMILY="${MAX_PER_FAMILY:-}"
@@ -32,6 +35,10 @@ FAILED_LOCK="${WK_DIR}/.failed_motif.lock"
 source "${PROJECT_DIR}/scripts/slurm/rockfish_common.sh"
 
 ml anaconda3/2024.02-1
+# Structured domain families are aligned with MAFFT. Without the module the analysis
+# still runs, but on the weaker progressive fallback, and the summary CSV would record a
+# different aligner than the one this pipeline is calibrated on.
+ml "${MAFFT_MODULE}" 2> /dev/null || printf "WARNING: could not load %s; falling back to the progressive aligner\n" "${MAFFT_MODULE}" 1>&2
 conda activate "${CONDA_ENV}"
 
 if ! command -v analyze-motif-conservation > /dev/null 2>&1; then
@@ -61,6 +68,8 @@ motif_args=(
 	"${FETCH_JSON}"
 	-o "${RESULTS_DIR}"
 	--min-members "${MIN_MEMBERS}"
+	--msa-backend "${MSA_BACKEND}"
+	--msa-threads "${MSA_THREADS}"
 )
 if [[ -n ${MAX_PER_FAMILY} ]]; then
 	motif_args+=(--max-per-family "${MAX_PER_FAMILY}")
