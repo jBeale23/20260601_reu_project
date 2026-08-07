@@ -16,16 +16,20 @@ if TYPE_CHECKING:
 
 
 def predict_class(features: ArchitectureFeatures) -> PredictedClass:
-    """Assign rule-based JDP class from architecture features."""
+    """Assign rule-based JDP class from architecture features.
+
+    The zinc-finger-like cysteine-rich region is the discriminator between class A and
+    class B: class A carries it, class B carries the C-terminal substrate-binding domain
+    and/or a G/F-rich region without it, and everything else with a J-domain is class C
+    (see the FEBS review linked from the README).
+    """
     if not features.has_j_domain:
         return "unknown"
 
-    class_a = features.n_domains >= MIN_CLASS_A_DOMAINS and (features.has_dnaj_c or features.has_zinc_finger_like)
-    if class_a:
+    if features.has_zinc_finger_like:
         return "A"
 
-    class_b = features.n_domains >= MIN_CLASS_B_DOMAINS and features.has_gf_rich
-    if class_b:
+    if features.has_dnaj_c or (features.has_gf_rich and features.n_domains >= MIN_CLASS_B_DOMAINS):
         return "B"
 
     return "C"
@@ -46,7 +50,12 @@ def assign_class_confidence(
     if predicted_class == "A" and features.has_dnaj_c and features.n_domains >= MIN_CLASS_A_DOMAINS:
         return "high"
 
-    if predicted_class == "B" and features.has_gf_rich and has_hpd and hpd_confidence == "high":
+    if (
+        predicted_class == "B"
+        and (features.has_gf_rich or features.has_dnaj_c)
+        and has_hpd
+        and hpd_confidence == "high"
+    ):
         return "high"
 
     if has_hpd and hpd_confidence == "high" and features.n_domains >= MIN_CLASS_B_DOMAINS:

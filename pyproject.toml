@@ -8,6 +8,7 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
 	"aiohttp>=3.9",
+	"biopython>=1.84",
 	"tqdm>=4.66",
 ]
 
@@ -17,15 +18,24 @@ dev = [
 	"pytest-asyncio>=0.23",
 ]
 structure = [
-	"biopython>=1.84",
 	"numpy>=1.26",
 	"pyyaml>=6.0",
 	"scipy>=1.11",
+]
+# Real dual-layer backends. Both are optional: domain_layout degrades to FoldIndex
+# disorder scores and BLOSUM k-mer similarity when they are absent, and always reports
+# which backend produced a number.
+layout = [
+	"metapredict>=3",
+	"bio-shark>=2",
 ]
 
 [project.scripts]
 fetch-proteins-dnak = "data_fetching.fetch_proteins_dnak:cli"
 fetch-architectures-dnaj = "data_fetching.fetch_architectures_dnaj:cli"
+fetch-protein-domains = "data_fetching.fetch_domains:cli"
+analyze-domain-layout = "domain_layout.cli:main"
+validate-jdp-classification = "validation.cli:main"
 extract-uniprot-ids = "scripts.extract_uniprot_ids:main"
 prepare-rockfish-accessions = "scripts.rockfish_queue:main_prepare"
 summarize-rockfish-failures = "scripts.rockfish_queue:main_summarize_failures"
@@ -37,7 +47,15 @@ analyze-motif-conservation = "motif_conservation.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["data_fetching*", "scripts*", "structure_analysis*", "jdp_classifier*", "motif_conservation*"]
+include = [
+	"data_fetching*",
+	"scripts*",
+	"structure_analysis*",
+	"jdp_classifier*",
+	"motif_conservation*",
+	"domain_layout*",
+	"validation*",
+]
 
 [tool.ruff]
 line-length = 120
@@ -78,8 +96,9 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 # Ignore unused imports in __init__.py files
 "__init__.py" = ["F401"]
-# assert, private member access, and magic values are standard and expected in pytest
-"tests/*" = ["S101", "SLF001", "PLR2004"]
+# assert, private member access, magic values, and wide keyword-only builders are
+# standard and expected in pytest
+"tests/*" = ["S101", "SLF001", "PLR2004", "PLR0913"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

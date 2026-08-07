@@ -10,7 +10,10 @@ from typing import TYPE_CHECKING, Any, Literal
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from domain_layout.records import DomainStore
+
 from jdp_classifier.architecture import ArchitectureFeatures, features_from_ida, j_domain_position, parse_ida
+from jdp_classifier.domain_evidence import enrich_protein, ida_from_record, record_for_accession
 from jdp_classifier.hpd import classify_hpd
 from jdp_classifier.localization import LocalizationResult, classify_localization
 from jdp_classifier.rules import (
@@ -32,6 +35,7 @@ OUTPUT_COLUMNS = [
     "source_database",
     "architecture_ida",
     "architecture_ida_id",
+    "architecture_source",
     "appears_in_architecture_count",
     "n_domains",
     "j_domain_position",
@@ -102,6 +106,7 @@ class ClassificationResult:
     source_database: str
     architecture_ida: str
     architecture_ida_id: str
+    architecture_source: str
     appears_in_architecture_count: str
     n_domains: int
     j_domain_position: str
@@ -215,13 +220,32 @@ def classify_protein(
     allow_fetch: bool = True,
     cache: dict[str, str | None] | None = None,
     localization_cache: dict[str, LocalizationResult | None] | None = None,
+    domain_store: DomainStore | None = None,
 ) -> ClassificationResult:
-    """Classify one protein against its architecture context."""
+    """Classify one protein against its architecture context.
+
+    When ``domain_store`` is given, the fetched sequence, domain entries, and Pfam
+    architecture replace the metadata-only fetch record, so HPD and localization are
+    resolved without per-accession UniProt requests.
+    """
     protein = item.protein
     metadata = protein.get("metadata", {})
     accession = str(metadata.get("accession", ""))
 
+    record = record_for_accession(domain_store, accession)
+    if record is not None:
+        protein = enrich_protein(protein, record)
+        metadata = protein.get("metadata", {})
+
     ida_for_features = item.architecture_ida
+    architecture_source = "fetch"
+    if record is not None:
+        # The fetch IDA describes the architecture *group*; the record lists the Pfam
+        # matches actually on this protein. Prefer whichever names more domains.
+        derived_ida = ida_from_record(record)
+        if _domain_count(derived_ida) > _domain_count(ida_for_features):
+            ida_for_features = derived_ida
+            architecture_source = "domain_store"
     features: ArchitectureFeatures = features_from_ida(ida_for_features)
     position = j_domain_position(features)
 
@@ -261,7 +285,11 @@ def classify_protein(
         has_signal_peptide=localization.has_signal_peptide,
     )
 
-    architecture_ida = item.all_architecture_idas or item.architecture_ida
+    architecture_ida = (
+        ida_for_features
+        if architecture_source == "domain_store"
+        else (item.all_architecture_idas or item.architecture_ida)
+    )
 
     return ClassificationResult(
         accession=accession,
@@ -270,6 +298,7 @@ def classify_protein(
         source_database=_metadata_field(metadata, "source_database"),
         architecture_ida=architecture_ida,
         architecture_ida_id=item.architecture_ida_id,
+        architecture_source=architecture_source,
         appears_in_architecture_count=(
             "" if item.appears_in_architecture_count is None else str(item.appears_in_architecture_count)
         ),
@@ -295,6 +324,7 @@ def classify_fetch_json(
     dnaj_rows: DnajRowsMode = "dedupe",
     allow_fetch: bool = True,
     min_confidence: ConfidenceTier | None = None,
+    domain_store: DomainStore | None = None,
 ) -> tuple[list[ClassificationResult], int]:
     """Classify all proteins in a DnaJ fetch JSON file."""
     items = iter_protein_architectures(data, dnaj_rows=dnaj_rows)
@@ -309,6 +339,7 @@ def classify_fetch_json(
             allow_fetch=allow_fetch,
             cache=cache,
             localization_cache=localization_cache,
+            domain_store=domain_store,
         )
         if result.hpd_source == "uniprot":
             uniprot_fetches += 1

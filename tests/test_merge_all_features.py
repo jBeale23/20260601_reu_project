@@ -8,16 +8,21 @@ import sys
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
+import pytest
+
 if TYPE_CHECKING:
     from pathlib import Path
 
     from _pytest.capture import CaptureFixture
 
+from domain_layout.constants import FEATURE_COLUMNS
 from jdp_classifier.classify import JDP_DATA_COLUMNS, JDP_SOURCE_COLUMNS
 from jdp_classifier.classify import OUTPUT_COLUMNS as JDP_OUTPUT_COLUMNS
 from scripts.merge_all_features import (
+    DOMAIN_DATA_COLUMNS,
     OUTPUT_COLUMNS,
     MergeAllInputs,
+    load_domain_layout_table,
     load_jdp_table,
     merge_all_features,
     write_merged_all_csv,
@@ -380,3 +385,168 @@ def test_merge_all_cli_smoke(tmp_path: Path, capsys: CaptureFixture[str]) -> Non
     assert len(rows) == 3
     assert rows[0]["fetch_sources"] == "dnak"
     assert "jdp_predicted_class" in rows[0]
+
+
+def _domain_layout_row(
+    accession: str,
+    *,
+    predicted_class: str = "A",
+    predicted_subclass: str = "a_canonical",
+    novel: str = "false",
+    novelty_score: str = "0.0000",
+) -> dict[str, str]:
+    return {
+        "accession": accession,
+        "protein_name": f"Protein {accession}",
+        "protein_length": "376",
+        "organism_name": "Escherichia coli",
+        "n_entries": "5",
+        "n_structured_domains": "4",
+        "domain_family_layout": "j_domain>dnaj_c>zinc_finger_like",
+        "j_domain_position": "n_terminal",
+        "has_j_domain": "true",
+        "has_hpd": "true",
+        "has_dnaj_c": "true",
+        "has_zinc_finger_like": "true",
+        "has_gf_rich_region": "true",
+        "has_transmembrane": "false",
+        "has_signal_peptide": "false",
+        "idr_fraction": "0.0426",
+        "mean_disorder": "0.5000",
+        "disorder_backend": "foldindex",
+        "n_msa_regions": "5",
+        "n_shark_regions": "1",
+        "msa_residues": "315",
+        "shark_residues": "40",
+        "shark_backend": "blosum_kmer",
+        "shark_best_reference": "P08622|77-116|linker",
+        "shark_best_reference_class": "A",
+        "shark_best_similarity": "0.9000",
+        "layout_predicted_class": predicted_class,
+        "layout_predicted_subclass": predicted_subclass,
+        "layout_class_confidence": "high",
+        "layout_novelty_score": novelty_score,
+        "novel_class_candidate": novel,
+        "layout_evidence_tags": "novel_class_candidate" if novel == "true" else "",
+    }
+
+
+def _write_domain_csv(path: Path, rows: list[dict[str, str]]) -> None:
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=FEATURE_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def test_load_domain_layout_table_prefixes_columns(tmp_path: Path) -> None:
+    """Layout columns are namespaced so they never clash with the v1 classifier."""
+    path = tmp_path / "domain_layout_features.csv"
+    _write_domain_csv(path, [_domain_layout_row("P08622")])
+
+    table = load_domain_layout_table(path)
+    assert set(table["P08622"]) == set(DOMAIN_DATA_COLUMNS)
+    assert table["P08622"]["domain_layout_predicted_class"] == "A"
+    assert table["P08622"]["domain_shark_backend"] == "blosum_kmer"
+
+
+def test_load_domain_layout_table_rejects_missing_columns(tmp_path: Path) -> None:
+    """A truncated layout CSV is rejected with the missing column names."""
+    path = tmp_path / "bad.csv"
+    path.write_text("accession,layout_predicted_class\nP08622,A\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="missing required columns"):
+        load_domain_layout_table(path)
+
+
+def test_merge_includes_domain_layout_and_novel_flag(tmp_path: Path) -> None:
+    """Layout rows flow into the unified table with a top-level novel-class flag."""
+    domain_csv = tmp_path / "domain_layout_features.csv"
+    _write_domain_csv(
+        domain_csv,
+        [
+            _domain_layout_row("P08622"),
+            _domain_layout_row(
+                "P99999",
+                predicted_class="C",
+                predicted_subclass="c_atypical_multi_domain",
+                novel="true",
+                novelty_score="0.7500",
+            ),
+        ],
+    )
+
+    merged = merge_all_features(
+        MergeAllInputs(
+            dnak_by_accession={},
+            dnaj_by_accession={},
+            pocket_by_accession={},
+            jdp_by_accession={},
+            jdp_identity_by_accession={},
+            motif_by_accession={},
+            domain_by_accession=load_domain_layout_table(domain_csv),
+            provided_sources={"domain": True},
+        ),
+    )
+
+    by_accession = {row["accession"]: row for row in merged}
+    assert by_accession["P08622"]["has_domain_layout"] == "true"
+    assert by_accession["P08622"]["novel_class_candidate"] == "false"
+    assert by_accession["P99999"]["novel_class_candidate"] == "true"
+    assert "novel_class_candidate" in by_accession["P99999"]["classification_tags"]
+    assert "layout_c_atypical_multi_domain" in by_accession["P99999"]["classification_tags"]
+    assert by_accession["P08622"]["unified_confidence_tier"] == "high"
+
+
+def test_merge_leaves_domain_columns_empty_without_layout_input() -> None:
+    """Accessions without layout data keep empty layout columns and a false flag."""
+    merged = merge_all_features(
+        MergeAllInputs(
+            dnak_by_accession={},
+            dnaj_by_accession={},
+            pocket_by_accession={},
+            jdp_by_accession={"P1": dict.fromkeys(JDP_DATA_COLUMNS, "")},
+            jdp_identity_by_accession={},
+            motif_by_accession={},
+            provided_sources={"jdp": True},
+        ),
+    )
+    assert merged[0]["has_domain_layout"] == "false"
+    assert merged[0]["novel_class_candidate"] == "false"
+    assert all(merged[0][column] == "" for column in DOMAIN_DATA_COLUMNS)
+
+
+def test_inner_join_requires_domain_layout_when_provided(tmp_path: Path) -> None:
+    """--join inner drops accessions missing from the layout table."""
+    domain_csv = tmp_path / "domain_layout_features.csv"
+    _write_domain_csv(domain_csv, [_domain_layout_row("P08622")])
+
+    merged = merge_all_features(
+        MergeAllInputs(
+            dnak_by_accession={},
+            dnaj_by_accession={},
+            pocket_by_accession={},
+            jdp_by_accession={"P08622": dict.fromkeys(JDP_DATA_COLUMNS, ""), "P2": dict.fromkeys(JDP_DATA_COLUMNS, "")},
+            jdp_identity_by_accession={},
+            motif_by_accession={},
+            domain_by_accession=load_domain_layout_table(domain_csv),
+            provided_sources={"jdp": True, "domain": True},
+            join="inner",
+        ),
+    )
+    assert [row["accession"] for row in merged] == ["P08622"]
+
+
+def test_merge_all_cli_with_domain_csv(tmp_path: Path, capsys: CaptureFixture[str]) -> None:
+    """The CLI accepts --domain-csv on its own and reports novel candidates."""
+    domain_csv = tmp_path / "domain_layout_features.csv"
+    _write_domain_csv(
+        domain_csv,
+        [_domain_layout_row("P99999", novel="true", predicted_subclass="n_novel_candidate")],
+    )
+    output = tmp_path / "all_features.csv"
+
+    with patch.object(sys, "argv", ["merge-all-features", "--domain-csv", str(domain_csv), "-o", str(output)]):
+        merge_all_main()
+
+    rows = list(csv.DictReader(output.open(encoding="utf-8")))
+    assert rows[0]["domain_layout_predicted_subclass"] == "n_novel_candidate"
+    assert "1 novel-class candidate(s)" in capsys.readouterr().err

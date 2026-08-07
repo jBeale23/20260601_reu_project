@@ -35,13 +35,15 @@ def get_protein_sequence(protein: dict[str, Any]) -> str | None:
 
 
 def _is_j_domain_entry(entry: dict[str, Any]) -> bool:
+    """Whether an InterPro protein entry is a J-domain match.
+
+    Matches the InterPro entry, the Pfam signature, or any member-database signature
+    integrated into the J-domain InterPro entry (e.g. SMART SM00271).
+    """
     accession = str(entry.get("accession", ""))
     if accession in {J_DOMAIN_INTERPRO, J_DOMAIN_PFAM}:
         return True
-    if accession.startswith("PF") and J_DOMAIN_PFAM in accession:
-        return True
-    entry_type = entry.get("type")
-    return entry_type == J_DOMAIN_PFAM
+    return str(entry.get("integrated") or "") == J_DOMAIN_INTERPRO
 
 
 def find_j_domain_entry(protein: dict[str, Any]) -> dict[str, Any] | None:

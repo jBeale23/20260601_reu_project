@@ -7,6 +7,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import data_fetching.fetch_architectures_dnaj as m
+from data_fetching.fetch_architectures_dnaj import (
+    EXPECTED_FIRST_IDA_ID,
+    EXPECTED_FIRST_PROTEIN_COUNT,
+    warn_if_unexpected_first_architecture,
+)
 from data_fetching.utils import check_count_anomaly, get_with_retry, validate_api_response
 
 # --- Constants ---
@@ -445,3 +450,32 @@ async def test_fetch_proteins_for_arch_semaphore_released_after_partial() -> Non
         await m.fetch_proteins_for_arch(MagicMock(), arch, 1, semaphore, 1)
 
     assert semaphore._value == 1
+
+
+def test_warn_if_unexpected_first_architecture_accepts_known_first() -> None:
+    """The recorded first architecture produces no warnings."""
+    architectures = [
+        {"ida_id": EXPECTED_FIRST_IDA_ID, "unique_proteins": EXPECTED_FIRST_PROTEIN_COUNT},
+    ]
+    assert warn_if_unexpected_first_architecture(architectures) == []
+
+
+def test_warn_if_unexpected_first_architecture_flags_reordering() -> None:
+    """A different leading ida_id warns that InterPro ordering changed."""
+    warnings = warn_if_unexpected_first_architecture([{"ida_id": "deadbeef", "unique_proteins": 98256}])
+    assert any("expected" in warning for warning in warnings)
+
+
+def test_warn_if_unexpected_first_architecture_flags_count_drift() -> None:
+    """A large protein-count change on the first architecture is reported."""
+    warnings = warn_if_unexpected_first_architecture(
+        [{"ida_id": EXPECTED_FIRST_IDA_ID, "unique_proteins": 10}],
+    )
+    assert any("unique proteins" in warning for warning in warnings)
+
+
+def test_warn_if_unexpected_first_architecture_flags_empty_response() -> None:
+    """An empty architecture list is itself a warning."""
+    assert warn_if_unexpected_first_architecture([]) == [
+        "InterPro returned no architecture groups for IPR001623.",
+    ]

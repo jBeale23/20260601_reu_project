@@ -14,6 +14,9 @@ if TYPE_CHECKING:
 CONSOLE_SCRIPT_TARGETS: dict[str, str] = {
     "fetch-proteins-dnak": "data_fetching.fetch_proteins_dnak:cli",
     "fetch-architectures-dnaj": "data_fetching.fetch_architectures_dnaj:cli",
+    "fetch-protein-domains": "data_fetching.fetch_domains:cli",
+    "analyze-domain-layout": "domain_layout.cli:main",
+    "validate-jdp-classification": "validation.cli:main",
     "extract-uniprot-ids": "scripts.extract_uniprot_ids:main",
     "prepare-rockfish-accessions": "scripts.rockfish_queue:main_prepare",
     "summarize-rockfish-failures": "scripts.rockfish_queue:main_summarize_failures",

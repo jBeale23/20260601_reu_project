@@ -19,6 +19,8 @@ class ChaperonePresence:
     has_pocket: bool
     has_motif: bool
     charge_inversion_candidate: bool
+    has_domain_layout: bool = False
+    novel_class_candidate: bool = False
 
 
 def chaperone_system_membership(*, has_dnak: bool, has_dnaj: bool) -> str:
@@ -57,6 +59,17 @@ def unified_confidence_tier(
     if has_pocket:
         return min_confidence_tier(pocket_confidence_tier, pocket_mapping_confidence)
     return ""
+
+
+def build_layout_tags(domain_row: dict[str, str] | None, *, novel_class_candidate: bool) -> list[str]:
+    """Tags contributed by analyze-domain-layout (subclass and novel-category flag)."""
+    tags: list[str] = []
+    subclass = (domain_row or {}).get("domain_layout_predicted_subclass", "")
+    if subclass:
+        tags.append(f"layout_{subclass}")
+    if novel_class_candidate:
+        tags.append("novel_class_candidate")
+    return tags
 
 
 def build_classification_tags(
@@ -105,17 +118,20 @@ def derive_chaperone_classification_fields(
     presence: ChaperonePresence,
     jdp_row: dict[str, str],
     pocket_row: dict[str, str],
+    domain_row: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Return derived columns linking DnaJ classifier output with DnaK pocket metrics."""
     membership = chaperone_system_membership(
         has_dnak=presence.has_dnak,
         has_dnaj=presence.has_dnaj,
     )
+    layout_row = domain_row or {}
     unified = unified_confidence_tier(
-        jdp_class_confidence=jdp_row.get("jdp_class_confidence", ""),
+        jdp_class_confidence=jdp_row.get("jdp_class_confidence", "")
+        or layout_row.get("domain_layout_class_confidence", ""),
         pocket_confidence_tier=pocket_row.get("confidence_tier", ""),
         pocket_mapping_confidence=pocket_row.get("mapping_confidence", ""),
-        has_jdp=presence.has_jdp,
+        has_jdp=presence.has_jdp or presence.has_domain_layout,
         has_pocket=presence.has_pocket,
     )
     tags = build_classification_tags(
@@ -125,8 +141,10 @@ def derive_chaperone_classification_fields(
         charge_inversion_candidate=presence.charge_inversion_candidate,
         has_motif=presence.has_motif,
     )
+    layout_tags = build_layout_tags(layout_row, novel_class_candidate=presence.novel_class_candidate)
+    all_tags = [tag for tag in [*tags.split(";"), *layout_tags] if tag]
     return {
         "chaperone_system_membership": membership,
         "unified_confidence_tier": unified,
-        "classification_tags": tags,
+        "classification_tags": ";".join(all_tags),
     }
