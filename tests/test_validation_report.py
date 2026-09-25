@@ -95,6 +95,14 @@ def test_report_has_every_section() -> None:
         "dataset",
         "permutation_settings",
         "quality_control",
+        "benchmark_capacity",
+        "ordering_stability",
+        "sharp_decidability",
+        "redundancy_clustering",
+        "chaperone_evidence",
+        "homology_baseline",
+        "sequence_grammar",
+        "bakeoff",
         "label_calibration",
         "novelty",
         "recurrence",
@@ -117,7 +125,17 @@ def test_calibration_uses_only_curated_labels_and_reports_baselines() -> None:
 
     assert calibration["n_labelled"] == 7  # the unreviewed fragment is not labelled
     names = {evaluation["name"] for evaluation in calibration["evaluations"]}
-    assert names == {"domain_layout", "majority_class", "architecture_only"}
+    # The three always-available comparisons. The profile-HMM baselines appear on top of
+    # these whenever pyhmmer is installed and the folds are large enough to model, so this
+    # asserts presence rather than an exact set.
+    assert {"domain_layout", "majority_class", "architecture_only"} <= names
+    assert names <= {
+        "domain_layout",
+        "majority_class",
+        "architecture_only",
+        "profile_hmm_cv",
+        "profile_hmm_genus_blocked",
+    }
 
     for evaluation in calibration["evaluations"]:
         low, high = evaluation["accuracy_95ci"]
@@ -350,3 +368,48 @@ def test_cli_warns_when_references_are_missing(
         ],
     )
     assert "bundled reference JDPs not found" in capsys.readouterr().err
+
+
+def test_summary_reports_the_new_sections_when_present() -> None:
+    """Anything the report computes must reach the digest a person actually reads.
+
+    The JSON is the record; the stderr summary is what gets looked at. A section computed
+    and then omitted from the summary is a section nobody sees.
+    """
+    report = build_validation_report(
+        _labelled_store(),
+        config=LayoutRunConfig(disorder_backend=BACKEND_FOLDINDEX, shark_backend=BACKEND_KMER, write_fastas=False),
+        permutations=PermutationSettings(novelty=5, recurrence=5, seed=0),
+    )
+    summary = format_summary(report)
+
+    assert "sequence grammar:" in summary
+    assert "grammar-anomalous proteins" in summary
+    assert "overlap with novelty candidates" in summary
+    assert "bake-off" in summary
+
+
+def test_summary_states_why_a_section_is_absent_rather_than_omitting_it() -> None:
+    """A missing baseline must be visible as missing, not as silence."""
+    report = {
+        "quality_control": {"n_excluded": 0, "exclusion_reasons": {}},
+        "dataset": {"n_analyzed": 3, "n_after_quality_filter": 3},
+        "label_calibration": {"n_evaluated": 0, "evaluations": []},
+        "homology_baseline": {"backend": "unavailable", "n_predicted": 0, "n_labelled": 0},
+        "sequence_grammar": {"n_regions_profiled": 0},
+        "bakeoff": {"status": "not evaluated: too few labelled proteins for cross-validation"},
+        "novelty": {
+            "candidates_after_quality_filter": 0,
+            "removed_by_quality_filter": 0,
+            "permutation_null": {
+                "null_mean_candidates": 0.0,
+                "enrichment_over_null": 0.0,
+                "p_value": 1.0,
+                "empirical_fdr": 1.0,
+            },
+        },
+        "recurrence": {"n_architectures_tested": 0, "significance_fdr": 0.05, "n_significant_at_fdr": 0},
+    }
+    summary = format_summary(report)
+    assert "pyhmmer not installed" in summary
+    assert "not evaluated" in summary

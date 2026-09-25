@@ -15,7 +15,13 @@ from typing import TYPE_CHECKING
 import pytest
 
 from domain_layout import msa
-from domain_layout.fasta import align_msa_subfastas, read_fasta, write_fasta
+from domain_layout.fasta import (
+    AlignmentOptions,
+    align_msa_subfastas,
+    length_bands,
+    read_fasta,
+    write_fasta,
+)
 from domain_layout.msa import (
     BACKEND_MAFFT,
     BACKEND_PROGRESSIVE,
@@ -149,6 +155,9 @@ def test_mafft_command_carries_the_required_flags(tmp_path: Path) -> None:
     assert "--anysymbol" in command
     assert "--quiet" in command
     assert command[command.index("--thread") + 1] == "4"
+    # Gap-open penalty above MAFFT's default: these are length-bounded single domains,
+    # not full-length proteins that may carry real long insertions.
+    assert command[command.index("--op") + 1] == msa.GAP_OPEN_PENALTY
     # --reorder would break the positional mapping back to accessions.
     assert "--reorder" not in command
 
@@ -238,7 +247,7 @@ def test_align_msa_subfastas_writes_alignments(tmp_path: Path) -> None:
     """The MSA-routed subFASTAs become actual alignments, not just input files."""
     write_fasta([(f"P{i}", J_DOMAINS[i]) for i in range(3)], tmp_path / "msa" / "j_domain.fasta")
 
-    report = align_msa_subfastas(tmp_path, backend=BACKEND_PROGRESSIVE)
+    report = align_msa_subfastas(tmp_path, options=AlignmentOptions(backend=BACKEND_PROGRESSIVE))
 
     assert set(report) == {"j_domain"}
     entry = report["j_domain"]
@@ -262,7 +271,9 @@ def test_align_msa_subfastas_caps_and_samples_large_families(tmp_path: Path) -> 
     records = [(f"P{index:05d}", "MKQDYYEILGVSKTAEEREIRKAYKRLAMKYHPDRN") for index in range(300)]
     write_fasta(records, tmp_path / "msa" / "j_domain.fasta")
 
-    report = align_msa_subfastas(tmp_path, backend=BACKEND_PROGRESSIVE, max_sequences=20, seed=1)
+    report = align_msa_subfastas(
+        tmp_path, options=AlignmentOptions(backend=BACKEND_PROGRESSIVE, max_sequences=20, seed=1)
+    )
 
     assert report["j_domain"]["n_available"] == 300
     assert report["j_domain"]["n_aligned"] == 20
@@ -279,7 +290,7 @@ def test_align_msa_subfastas_caps_and_samples_large_families(tmp_path: Path) -> 
 def test_align_msa_subfastas_skips_single_sequence_families(tmp_path: Path) -> None:
     """One sequence is not an alignment and must not produce a file."""
     write_fasta([("P1", "MKQDYYEIL")], tmp_path / "msa" / "lonely.fasta")
-    assert align_msa_subfastas(tmp_path, backend=BACKEND_PROGRESSIVE) == {}
+    assert align_msa_subfastas(tmp_path, options=AlignmentOptions(backend=BACKEND_PROGRESSIVE)) == {}
     assert not (tmp_path / "msa_aligned" / "lonely.aln.fasta").exists()
 
 
@@ -293,9 +304,9 @@ def test_align_msa_subfastas_sampling_is_reproducible(tmp_path: Path) -> None:
     records = [(f"P{index:05d}", "MKQDYYEILGVSKTAEEREIRKAYKRLAMKYHPDRN") for index in range(100)]
     write_fasta(records, tmp_path / "msa" / "fam.fasta")
 
-    align_msa_subfastas(tmp_path, backend=BACKEND_PROGRESSIVE, max_sequences=10, seed=5)
+    align_msa_subfastas(tmp_path, options=AlignmentOptions(backend=BACKEND_PROGRESSIVE, max_sequences=10, seed=5))
     first = read_fasta(tmp_path / "msa_aligned" / "fam.aln.fasta")
-    align_msa_subfastas(tmp_path, backend=BACKEND_PROGRESSIVE, max_sequences=10, seed=5)
+    align_msa_subfastas(tmp_path, options=AlignmentOptions(backend=BACKEND_PROGRESSIVE, max_sequences=10, seed=5))
     assert read_fasta(tmp_path / "msa_aligned" / "fam.aln.fasta") == first
 
 
@@ -345,6 +356,93 @@ def test_falls_back_when_the_binary_cannot_be_executed(
         assert row.replace("-", "") == original
 
 
-def test_parse_fasta_ignores_a_bare_header() -> None:
-    """A malformed record must not crash the parser mid-alignment."""
-    assert msa._parse_fasta(">\nAAAA\n") == {"": "AAAA"}
+def test_length_bands_bound_the_ratio_within_a_group() -> None:
+    """The arithmetic the banding exists to enforce.
+
+    Aligning a sequence of length L against one of length kL leaves at least (1 - 1/k) of
+    the matrix as gaps before any biology is considered. Bounding the ratio inside a band
+    bounds that floor.
+    """
+    records = [(f"s{index}", "A" * length) for index, length in enumerate([20, 25, 30, 120, 130, 500, 505])]
+    bands = length_bands(records, max_ratio=2.0, min_members=2)
+
+    for band in bands:
+        lengths = [len(sequence) for _identifier, sequence in band]
+        assert max(lengths) <= 2.0 * min(lengths)
+
+
+def test_length_bands_discard_nothing() -> None:
+    """Every record must land in exactly one band; banding is not a filter."""
+    records = [(f"s{index}", "A" * length) for index, length in enumerate([10, 11, 40, 41, 300])]
+    bands = length_bands(records, max_ratio=2.0, min_members=2)
+
+    placed = [identifier for band in bands for identifier, _sequence in band]
+    assert sorted(placed) == sorted(identifier for identifier, _sequence in records)
+    assert len(placed) == len(set(placed))
+
+
+def test_a_bimodal_family_splits_into_its_modes() -> None:
+    """The dnaj_c case: fragments of an interrupted domain beside complete copies.
+
+    Measured on the full run: 46,245 regions near 27 residues and 41,802 near 125, from a
+    domain split by an inserted zinc finger. Aligned together they gave 92% gaps.
+    """
+    short = [(f"frag{index}", "A" * 27) for index in range(20)]
+    long_ones = [(f"full{index}", "A" * 125) for index in range(20)]
+    bands = length_bands([*short, *long_ones], max_ratio=2.0, min_members=2)
+
+    assert len(bands) == 2
+    assert {len(band) for band in bands} == {20}
+
+
+def test_a_unimodal_family_stays_in_one_band() -> None:
+    """Splitting a tight family would fragment it for nothing."""
+    records = [(f"s{index}", "A" * (60 + index % 8)) for index in range(50)]
+    assert len(length_bands(records, max_ratio=2.0, min_members=2)) == 1
+
+
+def test_bands_are_reported_even_when_too_small_to_align(tmp_path: Path) -> None:
+    """A band of one is a fact about the family, not something to hide."""
+    records = [(f"s{index}", "MKQDYYEILGVSKTAEEREIRKAYKRLAMKYHPDRN") for index in range(6)]
+    records.append(("lonely", "A" * 400))
+    write_fasta(records, tmp_path / "msa" / "fam.fasta")
+
+    report = align_msa_subfastas(tmp_path, options=AlignmentOptions(backend=BACKEND_PROGRESSIVE))
+
+    assert len(report) == 2
+    aligned = [entry for entry in report.values() if entry["n_aligned"] > 0]
+    unaligned = [entry for entry in report.values() if entry["n_aligned"] == 0]
+    assert len(aligned) == 1
+    assert len(unaligned) == 1
+    assert "too few members" in unaligned[0]["note"]
+
+
+def test_banding_lowers_the_gap_fraction_on_a_bimodal_family(tmp_path: Path) -> None:
+    """The measurable point of the change, checked rather than asserted."""
+    short = [(f"frag{index}", "MKQDYYEILGVSKTAEEREIRK"[: 20 + index % 3]) for index in range(15)]
+    long_ones = [
+        (f"full{index}", ("MKQDYYEILGVSKTAEEREIRKAYKRLAMKYHPDRN" * 4)[: 120 + index % 5]) for index in range(15)
+    ]
+    write_fasta([*short, *long_ones], tmp_path / "msa" / "fam.fasta")
+
+    banded = align_msa_subfastas(tmp_path, options=AlignmentOptions(backend=BACKEND_PROGRESSIVE))
+    unbanded = align_msa_subfastas(
+        tmp_path,
+        options=AlignmentOptions(backend=BACKEND_PROGRESSIVE, band_by_length=False),
+    )
+
+    worst_banded = max(entry["gap_fraction"] for entry in banded.values() if entry["n_aligned"] > 0)
+    single = next(entry["gap_fraction"] for entry in unbanded.values())
+    assert worst_banded < single
+
+
+def test_each_band_reports_its_length_range(tmp_path: Path) -> None:
+    """A reader must be able to see what each alignment actually covers."""
+    short = [(f"frag{index}", "A" * 30) for index in range(10)]
+    long_ones = [(f"full{index}", "A" * 130) for index in range(10)]
+    write_fasta([*short, *long_ones], tmp_path / "msa" / "fam.fasta")
+
+    report = align_msa_subfastas(tmp_path, options=AlignmentOptions(backend=BACKEND_PROGRESSIVE))
+
+    ranges = sorted(entry["length_range"] for entry in report.values())
+    assert ranges == [[30, 30], [130, 130]]

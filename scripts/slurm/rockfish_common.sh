@@ -164,3 +164,40 @@ rockfish_diagnose_missing_pdb() {
 	export ROCKFISH_MISSING_DETAIL="No AF PDB/CIF under ${structures_dir} for model v${model_version}"
 	printf "missing_any_structure\n"
 }
+
+# Put MAFFT on PATH, trying every source this cluster actually offers.
+#
+# Rockfish exposes mafft only through the SBGrid/BioGrids module trees, which are licensed
+# and refuse to load from a batch job, so `ml mafft/<version>` cannot be relied on. The
+# portable upstream tarball is self-contained and needs no root, so a copy vendored under
+# the project directory is the primary source; a module is tried only as a fallback for
+# clusters where one does load.
+#
+# Returns 0 when mafft is callable afterwards, 1 otherwise. Callers decide whether a
+# missing aligner is fatal or merely downgrades them to the progressive fallback.
+rockfish_ensure_mafft() {
+	local vendor_dir="${1:-}"
+	local module_name="${2:-}"
+
+	if command -v mafft > /dev/null 2>&1; then
+		return 0
+	fi
+
+	if [[ -n ${vendor_dir} && -x ${vendor_dir}/mafft ]]; then
+		PATH="${vendor_dir}:${PATH}"
+		export PATH
+		if command -v mafft > /dev/null 2>&1; then
+			return 0
+		fi
+	fi
+
+	if [[ -n ${module_name} ]]; then
+		# Never let a failed module load abort a job running under `set -e`.
+		ml "${module_name}" > /dev/null 2>&1 || true
+		if command -v mafft > /dev/null 2>&1; then
+			return 0
+		fi
+	fi
+
+	return 1
+}

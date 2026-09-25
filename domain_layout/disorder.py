@@ -258,7 +258,9 @@ def _metapredict_batch(sequences: Mapping[str, str]) -> dict[str, DisorderPredic
 
         raw = metapredict.predict_disorder(dict(sequences), return_domains=True)
         return {name: _prediction_from_disorder_object(raw[name], sequences[name]) for name in sequences}
-    except Exception:  # noqa: BLE001 - third-party backend: degrade instead of aborting the run
+    except Exception:
+        # Third-party backend: degrade instead of aborting the run rather than letting
+        # one bad sequence take down a job most of the way through a proteome.
         logger.warning("metapredict batch failed; retrying sequence by sequence.", exc_info=True)
         return None
 

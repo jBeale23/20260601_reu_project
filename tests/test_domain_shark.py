@@ -397,3 +397,45 @@ def test_best_match_reports_the_backend_that_scored_it(monkeypatch: pytest.Monke
     assert unknown_match is not None
     assert clean_match.backend == shark.BACKEND_BIO_SHARK
     assert unknown_match.backend == shark.BACKEND_KMER
+
+
+def test_vectorized_and_scalar_paths_agree_on_unscorable_kmers() -> None:
+    """A k-mer with a non-positive self-score must score zero on both code paths.
+
+    BLOSUM62 scores X against itself at -1, so an X-rich k-mer sums negative and has no
+    magnitude to normalise by. One negative self-score makes sqrt return NaN; two make
+    their product positive, so sqrt succeeds and returns a confident-looking number
+    derived from nothing. The scalar path already refused both, and the vectorized path
+    must not disagree with it.
+    """
+    unknown_rich = "XXXXXXXX"
+    normal = "MKQDYYEI"
+
+    assert kmer_similarity(unknown_rich, normal) == 0.0
+    assert kmer_similarity(unknown_rich, unknown_rich) == 1.0  # identity short-circuits
+
+    # The vectorized path, reached through the block scorer rather than the identity case.
+    assert shark_score(unknown_rich, normal, k=4, backend=BACKEND_KMER) == 0.0
+    assert shark_score("XXXXXXXXXXXX", "XXXXXXXXXXXA", k=4, backend=BACKEND_KMER) == 0.0
+
+
+def test_unknown_rich_sequences_emit_no_numpy_warning(recwarn: pytest.WarningsRecorder) -> None:
+    """The NaN this used to produce arrived as a RuntimeWarning on every scored pair.
+
+    At proteome scale that is millions of warning lines, which is how the bio_shark
+    substitution-matrix errors reached 1.3 GB in a single run.
+    """
+    shark_score("XXXXXXXXXXXXXXXX", "MKQDYYEILGVSKTAE", k=4, backend=BACKEND_KMER)
+    runtime_warnings = [item for item in recwarn if issubclass(item.category, RuntimeWarning)]
+    assert not runtime_warnings, [str(item.message) for item in runtime_warnings]
+
+
+def test_scores_stay_in_range_for_mixed_unknown_content() -> None:
+    """Whatever the residues, a similarity outside [0, 1] would corrupt the novelty term."""
+    for query, target in (
+        ("XBZXBZXBZXBZ", "MKQDYYEILGVS"),
+        ("XBZXBZXBZXBZ", "XBZXBZXBZXBZA"),
+        ("MKQDYYEILGVS", "MKQDYYEILGVS"),
+    ):
+        score = shark_score(query, target, k=3, backend=BACKEND_KMER)
+        assert 0.0 <= score <= 1.0

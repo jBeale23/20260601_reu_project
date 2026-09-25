@@ -20,7 +20,8 @@ PROJECT_DIR="${PROJECT_DIR:-${HOME}/repositories/20260601_reu_project}"
 WK_DIR="${WK_DIR:-${HOME}/scr4_sfried3/alphafoldfetch}"
 RESULTS_DIR="${RESULTS_DIR:-${WK_DIR}/motif_results}"
 CONDA_ENV="${CONDA_ENV:-${HOME}/pocket}"
-MAFFT_MODULE="${MAFFT_MODULE:-mafft/7.525}"
+MAFFT_MODULE="${MAFFT_MODULE:-}"
+MAFFT_VENDOR_DIR="${MAFFT_VENDOR_DIR:-${PROJECT_DIR}/vendor/mafft}"
 MSA_BACKEND="${MSA_BACKEND:-auto}"
 MSA_THREADS="${MSA_THREADS:-1}"
 FETCH_JSON="${FETCH_JSON:-${WK_DIR}/ipr001623_domain_architectures_no_dedup.json}"
@@ -35,11 +36,27 @@ FAILED_LOCK="${WK_DIR}/.failed_motif.lock"
 source "${PROJECT_DIR}/scripts/slurm/rockfish_common.sh"
 
 ml anaconda3/2024.02-1
-# Structured domain families are aligned with MAFFT. Without the module the analysis
-# still runs, but on the weaker progressive fallback, and the summary CSV would record a
-# different aligner than the one this pipeline is calibrated on.
-ml "${MAFFT_MODULE}" 2> /dev/null || printf "WARNING: could not load %s; falling back to the progressive aligner\n" "${MAFFT_MODULE}" 1>&2
-conda activate "${CONDA_ENV}"
+# `conda activate` fails outright on a plain venv, which is how the layout environment is
+# built when a specific Python is needed for bio-shark.
+rockfish_activate_env "${CONDA_ENV}"
+# Pin BLAS threading. numpy spawns a thread per core by default, so each worker process
+# would claim the whole node's worth of threads; on a shared partition that degrades every
+# other job on it. The pipeline sets these for its own workers too, but setting them here
+# also covers the parent process and any single-worker run.
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+
+# Structured domain families are aligned with MAFFT. Without it the analysis still runs,
+# but on the weaker progressive aligner, and the summary CSV records that instead.
+if rockfish_ensure_mafft "${MAFFT_VENDOR_DIR}" "${MAFFT_MODULE}"; then
+	printf "MAFFT: %s\n" "$(command -v mafft)"
+else
+	printf "WARNING: mafft not found (vendor dir '%s'); falling back to the progressive aligner\n" \
+		"${MAFFT_VENDOR_DIR}" 1>&2
+fi
 
 if ! command -v analyze-motif-conservation > /dev/null 2>&1; then
 	printf "analyze-motif-conservation not found after activating conda env '%s'\n" "${CONDA_ENV}" 1>&2

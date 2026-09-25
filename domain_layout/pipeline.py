@@ -14,6 +14,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field, replace
 from math import ceil
@@ -29,7 +30,7 @@ from domain_layout.constants import (
     ROUTE_MSA,
     ROUTE_SHARK,
 )
-from domain_layout.fasta import align_msa_subfastas, write_subfastas
+from domain_layout.fasta import AlignmentOptions, align_msa_subfastas, write_subfastas
 from domain_layout.profiles import (
     LayoutClassification,
     LayoutEvidence,
@@ -41,7 +42,7 @@ from domain_layout.records import DomainStore, ProteinDomainRecord, load_domain_
 from domain_layout.regions import Region, segment_protein
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
     from domain_layout.disorder import DisorderPrediction
@@ -62,6 +63,23 @@ PROGRESS_LOG_INTERVAL = 5000
 # of the run, and progress is reported roughly this many times per worker.
 CHUNKS_PER_WORKER = 8
 
+# Thread-limiting variables set on worker processes. numpy's BLAS spawns a thread per core
+# by default, so N worker processes each running matrix work claim N x cores threads. On a
+# 13-CPU allocation that measured at ~189% CPU per worker - roughly 25 cores' worth of
+# threads competing for 13. On a shared partition that degrades every other job on the
+# node, and it slows this one too through context switching, since the k-mer blocks are
+# small enough that thread coordination costs more than it saves.
+#
+# Set in the parent before the pool is created: "spawn" children start a fresh interpreter
+# and inherit os.environ, so they read these before importing numpy.
+_THREAD_LIMIT_VARIABLES = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -80,6 +98,9 @@ class LayoutRunConfig:
     msa_threads: int = 1
     max_aligned_per_family: int = 2000
     seed: int = 0
+    # Structural features keyed by accession, supplied by the caller when the structural
+    # challengers should run. Empty means grammar-only, which is the default.
+    structural_features: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
     max_proteins: int | None = None
     workers: int = 1
 
@@ -298,6 +319,20 @@ def _chunk_records(
     return [list(records[start : start + size]) for start in range(0, len(records), size)]
 
 
+def _limit_worker_threads() -> dict[str, str]:
+    """Pin worker BLAS to one thread each, returning the variables that were changed.
+
+    An explicit setting by the caller is respected rather than overridden - someone who
+    deliberately set OMP_NUM_THREADS knows something this function does not.
+    """
+    changed: dict[str, str] = {}
+    for name in _THREAD_LIMIT_VARIABLES:
+        if name not in os.environ:
+            os.environ[name] = "1"
+            changed[name] = "1"
+    return changed
+
+
 def _analyze_parallel(
     records: Sequence[ProteinDomainRecord],
     config: LayoutRunConfig,
@@ -314,6 +349,10 @@ def _analyze_parallel(
     # threads at import. Forking a multi-threaded process can deadlock the child, which
     # on a cluster shows up as a job that hangs until it hits its time limit.
     context = get_context("spawn")
+
+    limited = _limit_worker_threads()
+    if limited:
+        logger.info("pinned worker BLAS threads to 1 (%s)", ", ".join(sorted(limited)))
 
     workers = max(1, min(config.workers, len(chunks)))
     results: list[list[ProteinLayout]] = [[] for _ in chunks]
@@ -479,10 +518,12 @@ def write_outputs(
             logger.info("aligning MSA-routed subFASTAs")
             summary["msa_alignments"] = align_msa_subfastas(
                 subfasta_dir,
-                backend=run_config.msa_backend,
-                threads=run_config.msa_threads,
-                max_sequences=run_config.max_aligned_per_family,
-                seed=run_config.seed,
+                options=AlignmentOptions(
+                    backend=run_config.msa_backend,
+                    threads=run_config.msa_threads,
+                    max_sequences=run_config.max_aligned_per_family,
+                    seed=run_config.seed,
+                ),
             )
 
     (output_dir / SUMMARY_FILENAME).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")

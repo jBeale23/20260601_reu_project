@@ -20,7 +20,7 @@
 #   conda activate "${HOME}/affetch"
 #
 # Prepare inputs (run once after each fetch; dedupes and validates counts):
-#   prepare-rockfish-accessions ipr012725_proteins.json --wk-dir "${WK_DIR}"
+#   prepare-rockfish-accessions ipr013126_proteins.json --wk-dir "${WK_DIR}"
 #
 # Submit (writes a fixed array snapshot; do not run affetch_rockfish.sh directly):
 #   bash scripts/slurm/submit_affetch_rockfish.sh

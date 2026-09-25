@@ -29,7 +29,8 @@ DOMAIN_STORE="${DOMAIN_STORE:-${WK_DIR}/protein_domains.json}"
 CONDA_ENV="${CONDA_ENV:-${HOME}/layout}"
 DISORDER_BACKEND="${DISORDER_BACKEND:-auto}"
 SHARK_BACKEND="${SHARK_BACKEND:-auto}"
-MAFFT_MODULE="${MAFFT_MODULE:-mafft/7.525}"
+MAFFT_MODULE="${MAFFT_MODULE:-}"
+MAFFT_VENDOR_DIR="${MAFFT_VENDOR_DIR:-${PROJECT_DIR}/vendor/mafft}"
 # Off by default: aligning the MSA-routed subFASTAs is a second substantial compute stage
 # on top of the per-protein analysis. Set ALIGN_MSA=1 to run it in the same job.
 ALIGN_MSA="${ALIGN_MSA:-0}"
@@ -52,12 +53,27 @@ FAILED_LOCK="${WK_DIR}/.failed_layout.lock"
 source "${PROJECT_DIR}/scripts/slurm/rockfish_common.sh"
 
 ml anaconda3/2024.02-1
-if [[ ${ALIGN_MSA} == "1" ]]; then
-	# Only needed for --align-msa; without it the run still succeeds, but on the weaker
-	# progressive fallback, which the summary would then record.
-	ml "${MAFFT_MODULE}" 2> /dev/null || printf "WARNING: could not load %s; falling back to the progressive aligner\n" "${MAFFT_MODULE}" 1>&2
-fi
 rockfish_activate_env "${CONDA_ENV}"
+# Pin BLAS threading. numpy spawns a thread per core by default, so each worker process
+# would claim the whole node's worth of threads; on a shared partition that degrades every
+# other job on it. The pipeline sets these for its own workers too, but setting them here
+# also covers the parent process and any single-worker run.
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+
+if [[ ${ALIGN_MSA} == "1" ]]; then
+	# Only needed for --align-msa. Without MAFFT the run still succeeds, but on the weaker
+	# progressive aligner, and the summary would record that instead.
+	if rockfish_ensure_mafft "${MAFFT_VENDOR_DIR}" "${MAFFT_MODULE}"; then
+		printf "MAFFT: %s\n" "$(command -v mafft)"
+	else
+		printf "WARNING: mafft not found (vendor dir '%s'); falling back to the progressive aligner\n" \
+			"${MAFFT_VENDOR_DIR}" 1>&2
+	fi
+fi
 
 if ! command -v analyze-domain-layout > /dev/null 2>&1; then
 	printf "analyze-domain-layout not found after activating conda env '%s'\n" "${CONDA_ENV}" 1>&2

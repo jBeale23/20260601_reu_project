@@ -167,7 +167,7 @@ pip install -e .
 | `classify-jdp` | Rule-based class A/B/C from domain architecture, HPD, and localization |
 | `analyze-motif-conservation` | Conserved charge windows and IDR block grammars per domain family |
 | `analyze-pocket-charge` | Net charge at the DnaK/Hsp70 SBD peptide-binding pocket |
-| `validate-jdp-classification` | Quality control, calibration against curated labels, permutation nulls, cross-species recurrence |
+| `validate-jdp-classification` | Quality control, calibration against curated labels, permutation nulls, cross-species recurrence, profile-HMM baseline, and the candidate-model bake-off |
 | `extract-uniprot-ids` | Unique accessions to stdout or a file |
 | `prepare-rockfish-accessions` | Deduped accession queue for SLURM array jobs |
 | `summarize-rockfish-failures` | Reason-code summary of a failure log |
@@ -442,6 +442,90 @@ accessions cluster by submitting project and organism, so the first 500 members 
 family come from a handful of proteomes, and a conservation score measured on them
 describes those proteomes rather than the family. `n_available` in the summary CSV records
 how many members existed before sampling.
+
+### Sequence grammar and complexity
+
+The alignment-free layer asks how similar a region is to a reference. This asks a
+different question: how is it *built*? `domain_layout/grammar.py` measures three things
+over a reduced chemical alphabet, and the reduction is what makes them comparable across
+diverged homologs - 20 amino acids give far too sparse an n-mer distribution to estimate
+above k=2.
+
+| Measure | What it detects |
+|---|---|
+| Block entropy `H(k)` and entropy rate `h_k = H(k) - H(k-1)` | The hierarchy: each order reports only what the shorter context failed to explain. A repeat grammar falls steeply from `h_1` to `h_2`. |
+| `compression_ratio` | An upper bound on Kolmogorov complexity, via LZMA. Catches long-range repetition a fixed-`k` entropy cannot see. |
+| `order_score` | The headline measure: compressibility **relative to a composition-matched shuffle**. |
+| `normalized_compression_distance` | Similarity needing no substitution matrix at all. |
+
+**Why the shuffle control is not optional.** Raw compression ratio is dominated by length:
+uniformly random sequence compresses to 1.32 of its size at 25 residues and 0.515 at 1500.
+Thresholding that number compares lengths, not grammars. Shuffling destroys order while
+preserving length and exact composition, so `1 - C(x)/mean(C(shuffle(x)))` isolates
+arrangement. Measured across 40-1500 residues: random scores ≤0.02, a compositionally
+skewed but non-periodic G/F-like stretch ≤0.10, and a true tandem repeat 0.40 to 0.93.
+
+**Two tests, because neither covers the other.** A homopolymer scores exactly zero on
+`order_score` - every permutation of `QQQQ...` is the same string, so the control equals
+the observation. That case has near-zero first-order entropy, which is what
+`is_compositionally_degenerate` tests. `is_low_complexity` covers repeats; the two are
+kept separate rather than merged into one score that would hide both blind spots.
+
+Entropy is Miller-Madow corrected throughout, because plug-in entropy from a short region
+is biased downward - without it a 30-residue linker looks more ordered than a 300-residue
+one purely through sample size.
+
+### Profile HMMs (`domain_layout/hmmer.py`)
+
+MAFFT aligns a domain family, HMMER3 turns that alignment into a profile, and any protein
+can be scored against it. This exists as the **baseline the classifier must beat**: profile
+HMMs are the standard method for remote homology and are what InterPro's own signatures are
+built from, so a rule system that cannot beat `hmmsearch` has not earned its complexity.
+
+Their ceiling matters too, and is the reason for the rest of this project: profile HMMs
+rest on positional conservation, so they lose power exactly where the interest lies -
+highly diverged JDPs in non-model organisms, and the unalignable regions carrying much of
+the class signal. That is a reason to measure against them, not to skip them.
+
+`pyhmmer` is HMMER3 compiled as a Python extension, not a reimplementation, so results
+match the `hmmbuild` / `hmmsearch` binaries with no binary on `PATH`.
+
+**The baseline is cross-validated, and that is load-bearing.** Building one profile per
+class from the labelled proteins and then classifying those same proteins is not a weak
+baseline, it is an invalid one - each protein contributed to the profile that later
+recognises it. `validation/homology.py` uses stratified 5-fold cross-validation with
+out-of-fold predictions only. A second, subtler leak is left visible rather than silently
+fixed: folds are split at random rather than by sequence identity, so close homologs may
+remain in training. That inflates the baseline and anything compared against it equally,
+so the comparison stands - but neither number transfers to a novel organism, and the
+report says so.
+
+### Candidate models (`experimental/`)
+
+Nothing in `experimental/` is on the production path. Each module is a challenger,
+measured head-to-head against the incumbent on identical proteins and labels, and it
+replaces nothing unless it wins that measurement.
+`tests/test_experimental_isolation.py` enforces the one-way dependency by parsing the
+imports of every production module, so the guarantee is structural rather than a
+convention.
+
+The current challenger is `grammar_syntax_cv`: the grammar features above fed to a
+class-conditional Gaussian model. It reads **no InterPro annotation at any point**, which
+is the whole point - its score is what would be available for a protein nothing has
+annotated. A test greps the source for annotation-derived fields to keep that true.
+
+Promotion requires **all three** of:
+
+1. Macro-F1 above the incumbent, so a gain confined to the majority class does not count.
+2. The incumbent's accuracy falling outside the challenger's Wilson 95% interval. On 129
+   labelled proteins that interval is roughly eight points wide, so a two-point lead is
+   not a result.
+3. Beating the profile-HMM baseline.
+
+A challenger failing any criterion is reported with its numbers and left where it is.
+`bakeoff.verdict.decision` states the outcome in words so a reader need not interpret
+three booleans. See [docs/neural_architecture.md](docs/neural_architecture.md) for the
+design review of the proposed deep model and the order of work it implies.
 
 ### Outputs
 
@@ -980,6 +1064,8 @@ domain_layout/
   disorder.py                          # metapredict adapter + FoldIndex fallback
   shark.py                             # bio-shark adapter + BLOSUM k-mer fallback
   msa.py                               # MAFFT adapter + progressive fallback
+  grammar.py                           # n-mer syntax, entropy, compression complexity
+  hmmer.py                             # Profile HMMs via pyhmmer (HMMER3)
   regions.py                           # Residue segmentation and MSA/SHARK routing
   profiles.py                          # Class/subclass rules and novelty scoring
   fasta.py                             # subFASTA writers
@@ -992,7 +1078,12 @@ validation/
   metrics.py                           # Wilson intervals, per-class F1, macro-F1, baseline
   nulls.py                             # Configuration-model permutation null + FDR
   recurrence.py                        # Cross-species spread with a permutation null + BH
+  homology.py                          # Cross-validated profile-HMM baseline
+  grammar_signals.py                   # Grammar summary + novelty cross-check
   report.py, cli.py                    # validate-jdp-classification
+experimental/                          # Candidate models; never on the production path
+  grammar_classifier.py                # Annotation-free grammar challenger
+  bakeoff.py                           # Head-to-head scoring and promotion criteria
 jdp_classifier/
   architecture.py, rules.py            # IDA parsing, class A/B/C rules, layout tags
   domain_evidence.py                   # Domain-store evidence for the classifier
@@ -1014,5 +1105,5 @@ scripts/
 docs/
   pocket_validation.md                 # 1DKX round-trip and dev-set validation
   jdp_classifier_calibration.md        # Classifier and layout calibration
-tests/                                 # 550+ tests; conftest.py holds shared fixtures
+tests/                                 # 630+ tests; conftest.py holds shared fixtures
 ```

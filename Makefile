@@ -28,4 +28,4 @@ test:
 	[ "$$FAILURE" -eq 0 ] || exit 1
 
 pytest:
-	pytest tests/ -v
+	pytest tests/ -v -rs

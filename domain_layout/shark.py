@@ -185,9 +185,22 @@ def _similarity_block(
     for position in range(query.shape[1]):
         cross += dense[np.ix_(query[:, position], target[:, position])]
 
-    norm = np.sqrt(np.outer(query_self, target_self))
+    # A k-mer's self-score can be non-positive: BLOSUM62 scores X against itself at -1, so
+    # any k-mer built largely from unknown residues sums negative. Such a k-mer has no
+    # meaningful magnitude to normalise by, and both failure modes have to be handled
+    # explicitly rather than left to the arithmetic.
+    #
+    # One negative self-score gives a negative product, so sqrt returns NaN and floods the
+    # log. Two negative self-scores are worse and quieter: their product is *positive*, so
+    # sqrt succeeds and the pair receives a similarity normalised by a magnitude derived
+    # from two negative quantities - a plausible-looking number that means nothing.
+    #
+    # The scalar path in kmer_similarity already refuses both cases; this keeps the
+    # vectorized path agreeing with it.
+    scorable = np.outer(query_self > 0, target_self > 0)
+    norm = np.sqrt(np.outer(np.maximum(query_self, 0.0), np.maximum(target_self, 0.0)))
     with np.errstate(divide="ignore", invalid="ignore"):
-        similarity = np.where(norm > 0, cross / norm, 0.0)
+        similarity = np.where(scorable & (norm > 0), cross / norm, 0.0)
     return np.clip(similarity, _MIN_SIMILARITY, _MAX_SIMILARITY)
 
 
@@ -255,7 +268,9 @@ def _bio_shark_score(first: str, second: str, *, k: int, threshold: float) -> fl
         from bio_shark.dive import run  # noqa: PLC0415
 
         return float(run.run_normal(sequence1=first, sequence2=second, k=k, threshold=threshold))
-    except Exception:  # noqa: BLE001 - third-party backend: degrade instead of aborting the run
+    except Exception:
+        # Third-party backend: degrade instead of aborting the run rather than letting
+        # one bad sequence take down a job most of the way through a proteome.
         logger.warning("bio_shark scoring failed; falling back to BLOSUM k-mer scores.", exc_info=True)
         return None
 

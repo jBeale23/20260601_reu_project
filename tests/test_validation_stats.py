@@ -11,6 +11,7 @@ from itertools import pairwise
 
 import pytest
 
+from validation.homology import _genus_blocked_folds
 from validation.metrics import ClassMetrics, evaluate, majority_baseline, wilson_interval
 from validation.recurrence import (
     benjamini_hochberg,
@@ -201,3 +202,68 @@ def test_recurrence_null_is_calibrated_on_random_data() -> None:
     significant = [item for item in recurrence.values() if item.p_value < 0.05]
     # At most a small fraction of the four architectures may look significant by chance.
     assert len(significant) <= 1
+
+
+def test_genus_blocked_folds_keep_a_genus_intact() -> None:
+    """The property the whole blocked evaluation depends on.
+
+    If one protein of a genus is held out while its relatives stay in training, the
+    profile that scores it was built partly from near-identical sequence, and the score
+    measures memorised homology rather than generalisation.
+    """
+    labels = {f"P{index:03d}": "A" for index in range(60)}
+    organisms = {f"P{index:03d}": f"Genus{index % 7} species{index}" for index in range(60)}
+
+    folds = _genus_blocked_folds(labels, organisms, n_folds=5, seed=0)
+
+    assert sum(len(fold) for fold in folds) == len(labels)
+    assert {accession for fold in folds for accession in fold} == set(labels)
+
+    fold_of = {accession: index for index, fold in enumerate(folds) for accession in fold}
+    by_genus: dict[str, set[int]] = {}
+    for accession in labels:
+        genus = organisms[accession].split(" ")[0]
+        by_genus.setdefault(genus, set()).add(fold_of[accession])
+    for genus, indices in by_genus.items():
+        assert len(indices) == 1, f"{genus} was split across folds {sorted(indices)}"
+
+
+def test_genus_blocked_folds_stay_roughly_balanced() -> None:
+    """Genus sizes are very uneven; folds must not collapse to one huge and four empty."""
+    labels = {}
+    organisms = {}
+    # One dominant genus and many small ones, as in a real JDP label set.
+    for index in range(40):
+        labels[f"big{index}"] = "C"
+        organisms[f"big{index}"] = "Escherichia coli"
+    for index in range(40):
+        labels[f"small{index}"] = "B"
+        organisms[f"small{index}"] = f"Genus{index} sp"
+
+    folds = _genus_blocked_folds(labels, organisms, n_folds=5, seed=1)
+    sizes = sorted(len(fold) for fold in folds)
+    assert all(size > 0 for size in sizes)
+    # The dominant genus forces one large fold; the rest must still carry real weight.
+    assert sizes[0] >= 5
+
+
+def test_genus_blocked_folds_are_reproducible() -> None:
+    """Same seed, same partition, or a rerun would not reproduce the reported score."""
+    labels = {f"P{index:03d}": "A" for index in range(40)}
+    organisms = {f"P{index:03d}": f"Genus{index % 9} sp" for index in range(40)}
+    first = _genus_blocked_folds(labels, organisms, n_folds=4, seed=3)
+    second = _genus_blocked_folds(labels, organisms, n_folds=4, seed=3)
+    assert first == second
+
+
+def test_missing_organism_names_share_one_blocking_group() -> None:
+    """Unknown provenance must be treated as one group, not as many distinct genera.
+
+    Scattering unnamed organisms across folds would quietly reintroduce the leak the
+    blocking exists to remove.
+    """
+    labels = {f"P{index}": "A" for index in range(10)}
+    organisms = dict.fromkeys(labels, "")
+    folds = _genus_blocked_folds(labels, organisms, n_folds=5, seed=0)
+    non_empty = [fold for fold in folds if fold]
+    assert len(non_empty) == 1

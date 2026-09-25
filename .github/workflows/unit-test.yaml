@@ -17,8 +17,39 @@ jobs:
         with:
           python-version: "3.12"
 
+      # MAFFT aligns the structured (MSA-routed) domain families. It is a binary rather
+      # than a Python package, so pip cannot supply it. Without it the MAFFT adapter tests
+      # skip and CI would only ever exercise the progressive fallback.
+      - name: Install MAFFT
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mafft
+          mafft --version
+
+      # metapredict depends on PyTorch, which resolves to a multi-gigabyte CUDA build on
+      # PyPI. The CPU index is the documented install for this project and keeps the job
+      # small; installing it first stops the later resolve from pulling the CUDA wheel.
+      - name: Install CPU-only PyTorch
+        run: pip install --index-url https://download.pytorch.org/whl/cpu torch
+
+      # The layout extra (metapredict + bio-shark) is optional at runtime, but leaving it
+      # out of CI meant 21 tests skipped silently and the real backends were never
+      # exercised here - only their fallbacks.
       - name: Install Dependencies
-        run: pip install -e ".[dev,structure]"
+        run: pip install -e ".[dev,structure,layout]"
+
+      - name: Report Backend Availability
+        run: |
+          python - <<'PY'
+          from importlib.util import find_spec
+          from shutil import which
+          for name, present in (
+              ("metapredict", find_spec("metapredict") is not None),
+              ("bio_shark", find_spec("bio_shark") is not None),
+              ("mafft", which("mafft") is not None),
+          ):
+              print(f"{name}: {'available' if present else 'MISSING - dependent tests will skip'}")
+          PY
 
       - name: Run Make Test
         run: make test

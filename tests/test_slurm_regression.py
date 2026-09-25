@@ -466,11 +466,14 @@ def test_motif_worker_loads_mafft_and_passes_the_backend() -> None:
     different analysis, which is why the worker warns rather than failing quietly.
     """
     text = _read_slurm("analyze_motif_rockfish.sh")
-    assert "MAFFT_MODULE" in text
-    assert 'ml "${MAFFT_MODULE}"' in text
+    assert "rockfish_ensure_mafft" in text
+    assert "MAFFT_VENDOR_DIR" in text
     assert "falling back to the progressive aligner" in text
     assert "--msa-backend" in text
     assert "--msa-threads" in text
+    # The worker must not activate with bare `conda activate`, which fails on a venv.
+    assert 'conda activate "${CONDA_ENV}"' not in text
+    assert "rockfish_activate_env" in text
 
 
 def test_layout_env_ships_mafft() -> None:
@@ -489,7 +492,76 @@ def test_layout_worker_gates_mafft_on_the_alignment_stage() -> None:
     """
     text = _read_slurm("analyze_domain_layout_rockfish.sh")
     assert 'ALIGN_MSA="${ALIGN_MSA:-0}"' in text
-    assert 'ml "${MAFFT_MODULE}"' in text
+    assert "rockfish_ensure_mafft" in text
     assert "--align-msa" in text
     assert "--max-aligned-per-family" in text
     assert "falling back to the progressive aligner" in text
+
+
+def test_mafft_helper_prefers_a_vendored_binary_over_a_module() -> None:
+    """Rockfish only exposes mafft through licensed module trees that refuse to load.
+
+    The portable upstream tarball needs no root and no licence, so a vendored copy is the
+    primary source and a module is merely a fallback. A failed module load must never
+    abort a job running under `set -e`.
+    """
+    helper = _read_slurm("rockfish_common.sh")
+    assert "rockfish_ensure_mafft" in helper
+    vendor_index = helper.index("vendor_dir")
+    module_index = helper.index("module_name")
+    # The vendored path is consulted first.
+    assert helper.index('PATH="${vendor_dir}') < helper.index('ml "${module_name}"')
+    assert vendor_index < len(helper)
+    assert module_index < len(helper)
+    assert 'ml "${module_name}" > /dev/null 2>&1 || true' in helper
+
+
+def test_mafft_helper_resolves_a_vendored_binary(tmp_path: Path) -> None:
+    """Exercise the helper rather than only reading it."""
+    vendor = tmp_path / "vendor"
+    vendor.mkdir()
+    binary = vendor / "mafft"
+    binary.write_text("#!/bin/sh\necho v7.526\n", encoding="utf-8")
+    binary.chmod(0o755)
+
+    script = (
+        f'source "{SLURM_DIR / "rockfish_common.sh"}"; '
+        f"ml() {{ return 1; }}; "
+        f"PATH=/usr/bin:/bin; "
+        f'rockfish_ensure_mafft "{vendor}" "some/module" && command -v mafft'
+    )
+    completed = subprocess.run(  # noqa: S603
+        ["/bin/bash", "-c", script],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert str(binary) in completed.stdout
+
+
+def test_mafft_helper_reports_failure_without_aborting(tmp_path: Path) -> None:
+    """No binary anywhere returns nonzero; the caller decides whether that is fatal."""
+    script = (
+        f'source "{SLURM_DIR / "rockfish_common.sh"}"; '
+        f"ml() {{ return 1; }}; "
+        f"PATH=/usr/bin:/bin; "
+        f'if rockfish_ensure_mafft "{tmp_path / "absent"}" "no/module"; then echo FOUND; else echo MISSING; fi'
+    )
+    completed = subprocess.run(  # noqa: S603
+        ["/bin/bash", "-c", script],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "MISSING" in completed.stdout
+
+
+@pytest.mark.parametrize(
+    "script_name",
+    ["analyze_domain_layout_rockfish.sh", "analyze_motif_rockfish.sh"],
+)
+def test_analysis_workers_pin_blas_threads(script_name: str) -> None:
+    """A worker per core, each spawning threads per core, oversubscribes a shared node."""
+    text = _read_slurm(script_name)
+    for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        assert f"export {variable}=1" in text, f"{script_name} does not pin {variable}"

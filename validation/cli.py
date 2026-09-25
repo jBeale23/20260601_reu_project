@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import logging
 import sys
 from pathlib import Path
@@ -14,7 +15,43 @@ from domain_layout.records import load_domain_store
 from domain_layout.reference_data import default_reference_classes, default_reference_store
 from validation.report import PermutationSettings, build_validation_report, format_summary, write_report
 
+logger = logging.getLogger(__name__)
+
 _DEFAULT_OUTPUT = Path("validation_report.json")
+
+
+def load_structural_features(path: Path | None) -> dict[str, dict[str, float]]:
+    """Read per-protein structural features from the CSV the structure stage writes.
+
+    Returns an empty mapping when no path is given, which is what leaves the bake-off
+    grammar-only. That default is why the structural challengers had never run: the
+    features were computed and written, but nothing on the command line could hand them
+    to the report, so ``structural_features`` was always empty.
+
+    Non-numeric columns are skipped rather than coerced - ``accession`` keys the row, and
+    a flag like ``is_largely_disordered`` arrives as a string that would otherwise become
+    a silent zero.
+    """
+    if path is None:
+        return {}
+    features: dict[str, dict[str, float]] = {}
+    with path.open(encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            accession = (row.get("accession") or "").strip()
+            if not accession:
+                continue
+            values: dict[str, float] = {}
+            for column, raw in row.items():
+                if column == "accession" or raw is None or raw == "":
+                    continue
+                try:
+                    values[column] = float(raw)
+                except ValueError:
+                    continue
+            if values:
+                features[accession] = values
+    logger.info("loaded structural features for %s proteins from %s", len(features), path)
+    return features
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -54,6 +91,16 @@ def build_parser() -> argparse.ArgumentParser:
         choices=(shark_backend.BACKEND_AUTO, shark_backend.BACKEND_BIO_SHARK, shark_backend.BACKEND_KMER),
         default=shark_backend.BACKEND_AUTO,
     )
+    parser.add_argument(
+        "--structural-features",
+        type=Path,
+        default=None,
+        help=(
+            "CSV of per-protein AlphaFold structural features, as written by "
+            "analyze-protein-structures. Supplying it enables the two structural "
+            "challengers; without it the bake-off is grammar-only."
+        ),
+    )
     parser.add_argument("--workers", type=int, default=1, help="Processes for the layout stage")
     parser.add_argument("--no-references", action="store_true", help="Skip SHARK reference comparison")
     return parser
@@ -89,6 +136,7 @@ def main(argv: list[str] | None = None) -> None:
             shark_backend=args.shark_backend,
             write_fastas=False,
             workers=max(1, args.workers),
+            structural_features=load_structural_features(args.structural_features),
         ),
         permutations=PermutationSettings(
             novelty=args.permutations,

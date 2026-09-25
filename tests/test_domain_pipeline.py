@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
@@ -530,3 +531,58 @@ def test_parallel_analysis_preserves_input_order() -> None:
 
     layouts = pipeline_module._analyze_parallel(records, config, [])
     assert [layout.record.accession for layout in layouts] == [record.accession for record in records]
+
+
+def test_worker_blas_threads_are_pinned(monkeypatch: pytest.MonkeyPatch) -> None:
+    """N worker processes each spawning a thread per core oversubscribes the allocation.
+
+    Measured on a 13-CPU cluster job: workers ran at ~189% CPU each, roughly 25 cores of
+    threads competing for 13. That degrades other jobs sharing the node and slows this one
+    through context switching, since the k-mer blocks are too small for threading to pay.
+    """
+    for name in pipeline_module._THREAD_LIMIT_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+
+    changed = pipeline_module._limit_worker_threads()
+
+    assert set(changed) == set(pipeline_module._THREAD_LIMIT_VARIABLES)
+    for name in pipeline_module._THREAD_LIMIT_VARIABLES:
+        assert os.environ[name] == "1"
+
+
+def test_an_explicit_thread_setting_is_respected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Someone who deliberately set OMP_NUM_THREADS knows something we do not."""
+    monkeypatch.setenv("OMP_NUM_THREADS", "4")
+    for name in pipeline_module._THREAD_LIMIT_VARIABLES:
+        if name != "OMP_NUM_THREADS":
+            monkeypatch.delenv(name, raising=False)
+
+    changed = pipeline_module._limit_worker_threads()
+
+    assert "OMP_NUM_THREADS" not in changed
+    assert os.environ["OMP_NUM_THREADS"] == "4"
+
+
+def test_parallel_analysis_pins_threads_before_spawning(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The variables must be set before the pool exists, or children inherit the default.
+
+    "spawn" children start a fresh interpreter and read os.environ at import time, so
+    setting the limits after pool creation would be too late to affect numpy.
+    """
+    for name in pipeline_module._THREAD_LIMIT_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+
+    seen: dict[str, str | None] = {}
+    real_get_context = pipeline_module.get_context
+
+    def spy(method: str):  # noqa: ANN202
+        seen["OMP_NUM_THREADS"] = os.environ.get("OMP_NUM_THREADS")
+        return real_get_context(method)
+
+    monkeypatch.setattr(pipeline_module, "get_context", spy)
+
+    records = [make_record(f"P{index:05d}", DNAJ_ECOLI_SEQUENCE) for index in range(120)]
+    pipeline_module._analyze_parallel(records, LayoutRunConfig(write_fastas=False, workers=2), [])
+
+    # get_context runs before the pool; by then the limit must already be in place.
+    assert os.environ["OMP_NUM_THREADS"] == "1"
