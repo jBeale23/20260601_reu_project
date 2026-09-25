@@ -3,7 +3,7 @@
 # Submit the Rockfish pocket-charge array job with a fixed per-job accession snapshot.
 #
 # Usage (from project root on Rockfish):
-#   prepare-rockfish-accessions ipr012725_proteins.json --wk-dir "${WK_DIR}"
+#   prepare-rockfish-accessions ipr013126_proteins.json --wk-dir "${WK_DIR}"
 #   bash scripts/slurm/submit_analyze_pocket_rockfish.sh
 #
 # Failed accessions in failed_pocket.txt are skipped by default.
@@ -127,6 +127,6 @@ printf "  conda activate \"%s\"\n" "${CONDA_ENV:-${HOME}/pocket}"
 printf "  cd \"%s\"\n" "${PROJECT_DIR}"
 printf "  analyze-pocket-charge --merge-results \"%s\" --output-dir \"%s\" --min-mapping-confidence high\n" \
 	"${RESULTS_DIR}" "${RESULTS_DIR}"
-printf "  merge-features ipr012725_proteins.json \\\n"
+printf "  merge-features ipr013126_proteins.json \\\n"
 printf "    --pocket-csv \"%s/pocket_charge_summary.csv\" \\\n" "${RESULTS_DIR}"
 printf "    -o \"%s/merged_features/dnak_with_pocket.csv\"\n" "${WK_DIR}"

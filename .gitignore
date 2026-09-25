@@ -26,6 +26,8 @@ Thumbs.db
 
 # InterPro fetch + pocket charge JSON (default CLI outputs)
 *.json
+# Curated reference data is tracked (bundled with the package)
+!data/reference_jdps/*.json
 
 # Rockfish work directory outputs (under WK_DIR on cluster or local test runs)
 array_queues/
@@ -64,3 +66,10 @@ data/jdp_classifications/
 
 # Shell test logs
 tests/*.log
+
+# Credentials. The BioGRID access key lives in the environment or in a file outside any
+# git tree; these patterns are a second line of defence against committing one by accident.
+*.key
+.biogrid_key
+*_access_key*
+.env

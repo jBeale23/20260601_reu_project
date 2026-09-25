@@ -1,0 +1,25 @@
+channels:
+  - conda-forge
+dependencies:
+  # bio-shark supports Python >=3.8,<3.13, so the layout env pins 3.12.
+  - python=3.12.8
+  - pip=25.0.1
+  # MAFFT aligns the structured (MSA-routed) domain families. It is a compiled binary,
+  # not a Python package, so it is a conda dependency rather than a pip one. On Rockfish
+  # prefer the cluster module (ml mafft/7.525) over this copy.
+  - mafft>=7.5
+  - pip:
+    - biopython>=1.84
+    - numpy>=1.26
+    - pyyaml>=6.0
+    - scipy>=1.11
+    # Real dual-layer backends, verified together on Python 3.12 with metapredict 3.0.2
+    # and bio-shark 2.x. metapredict pulls in PyTorch; if that install fails,
+    # analyze-domain-layout still runs with --disorder-backend foldindex and
+    # --shark-backend blosum_kmer.
+    #
+    # On a CPU-only node, install PyTorch from the CPU index first to avoid pulling
+    # ~2.5 GB of CUDA wheels:
+    #   pip install --index-url https://download.pytorch.org/whl/cpu torch
+    - metapredict>=3
+    - bio-shark>=2

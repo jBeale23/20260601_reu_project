@@ -8,6 +8,7 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
 	"aiohttp>=3.9",
+	"biopython>=1.84",
 	"tqdm>=4.66",
 ]
 
@@ -17,15 +18,31 @@ dev = [
 	"pytest-asyncio>=0.23",
 ]
 structure = [
-	"biopython>=1.84",
 	"numpy>=1.26",
 	"pyyaml>=6.0",
 	"scipy>=1.11",
+]
+# Real dual-layer backends. Both are optional: domain_layout degrades to FoldIndex
+# disorder scores and BLOSUM k-mer similarity when they are absent, and always reports
+# which backend produced a number.
+layout = [
+	"metapredict>=3",
+	"bio-shark>=2",
+	# HMMER3 as a Python extension, not a reimplementation. Used for the profile-HMM
+	# baseline the classifier is measured against; no binary needs to be on PATH.
+	"pyhmmer>=0.10",
 ]
 
 [project.scripts]
 fetch-proteins-dnak = "data_fetching.fetch_proteins_dnak:cli"
 fetch-architectures-dnaj = "data_fetching.fetch_architectures_dnaj:cli"
+fetch-protein-domains = "data_fetching.fetch_domains:cli"
+analyze-domain-layout = "domain_layout.cli:main"
+validate-jdp-classification = "validation.cli:main"
+analyze-jdp-hsp70-pairing = "validation.pairing_cli:main"
+fetch-biogrid-interactions = "data_fetching.fetch_biogrid_cli:main"
+analyze-coupling = "validation.coupling_cli:main"
+train-neural-challenger = "experimental.neural.cli:main"
 extract-uniprot-ids = "scripts.extract_uniprot_ids:main"
 prepare-rockfish-accessions = "scripts.rockfish_queue:main_prepare"
 summarize-rockfish-failures = "scripts.rockfish_queue:main_summarize_failures"
@@ -33,11 +50,24 @@ merge-features = "scripts.merge_features:main"
 merge-all-features = "scripts.merge_all_features:main"
 classify-jdp = "jdp_classifier.cli:main"
 analyze-pocket-charge = "structure_analysis.cli:main"
+analyze-protein-structures = "structure_analysis.features_cli:main"
 analyze-motif-conservation = "motif_conservation.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["data_fetching*", "scripts*", "structure_analysis*", "jdp_classifier*", "motif_conservation*"]
+include = [
+	"data_fetching*",
+	"scripts*",
+	"structure_analysis*",
+	"jdp_classifier*",
+	"motif_conservation*",
+	"domain_layout*",
+	"validation*",
+	# Candidate models under evaluation. Packaged so the bake-off can run wherever the
+	# validation suite runs; nothing on the production path imports it, which
+	# tests/test_experimental_isolation.py enforces.
+	"experimental*",
+]
 
 [tool.ruff]
 line-length = 120
@@ -78,8 +108,57 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 # Ignore unused imports in __init__.py files
 "__init__.py" = ["F401"]
-# assert, private member access, and magic values are standard and expected in pytest
-"tests/*" = ["S101", "SLF001", "PLR2004"]
+# Cluster driver scripts, vendored here so they are version-controlled rather than living
+# only in a scratch directory on Rockfish - which is how the last one nearly went missing.
+# They are run by sbatch as top-level scripts, not imported: their output *is* the SLURM
+# log, so `print` is the interface (T201); they load a store before defining helpers so a
+# bad path fails in seconds rather than after the imports (E402); and they are deliberately
+# not a package (INP001). Linting them as library code would mean rewriting working cluster
+# scripts to satisfy rules aimed at importable modules.
+# Their output is a fixed-width report read in a terminal, so `%` formatting is what keeps
+# the column specifiers next to the widths they set (UP031); the small closures that pull a
+# readout out of an interaction map take and return plain dicts whose types are evident from
+# two lines of context (ANN001/ANN202); and `main` is one long linear script by design, since
+# the sequence of steps *is* the documentation of what the run did (C901).
+# The neural challenger imports torch lazily, so that a machine without it can still
+# import the package and run the test suite. That means tensor-valued parameters and return
+# types cannot be annotated with real torch types at module scope - `Any` is the accurate
+# annotation, not a lazy one (ANN401). Model classes are defined inside a factory function
+# for the same reason, which reads as a non-top-level import (PLC0415).
+# A multi-input network takes several tensors: this model fuses a grammar profile with its
+# mask, a syntax token sequence, a static feature vector, and the language model's input ids
+# and attention mask. Splitting `forward` to satisfy an argument count would mean bundling
+# tensors into dicts that torch then cannot trace cleanly (PLR0913/PLR0917), and the model
+# classes are defined inside a factory so importing this package never requires torch, which
+# reads as branching complexity (C901).
+"experimental/neural/*.py" = ["ANN401", "PLC0415", "PLR0913", "PLR0917", "C901"]
+"scripts/cluster/*.py" = [
+	"T201",
+	"E402",
+	"INP001",
+	"D103",
+	"ANN201",
+	"PLR2004",
+	"I001",
+	"UP031",
+	"ANN001",
+	"ANN202",
+	"C901",
+	"PLR0915",
+	"PLR0912",
+]
+# assert, private member access, magic values, and wide keyword-only builders are
+# standard and expected in pytest
+"tests/*" = ["S101", "SLF001", "PLR2004", "PLR0913"]
+# The optional third-party backends can raise anything - metapredict wraps PyTorch and
+# bio-shark raises bare exceptions on malformed input - and the contract for both adapters
+# is to log and degrade rather than abort a run that may be most of the way through a
+# proteome. ruff exempts handlers that log, but applies that exemption inconsistently to
+# this construct: on identical input BLE001 fired in some runs and not others. Stating the
+# intent here is deterministic, where an inline directive was not - and the directive
+# itself was then reported as unused, so neither state passed reliably.
+"domain_layout/disorder.py" = ["BLE001"]
+"domain_layout/shark.py" = ["BLE001"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from domain_layout.records import load_domain_store
 from jdp_classifier.classify import classify_fetch_json, write_classifications_csv
 from scripts.extract_uniprot_ids import fetch_warnings
 
@@ -36,6 +37,12 @@ def main() -> None:
         help="Skip UniProt FASTA fallback when InterPro sequence is missing",
     )
     parser.add_argument(
+        "--domain-json",
+        type=Path,
+        default=None,
+        help="Domain store from fetch-protein-domains; supplies sequences and domains offline",
+    )
+    parser.add_argument(
         "--min-confidence",
         choices=("high", "medium", "low"),
         default=None,
@@ -57,11 +64,22 @@ def main() -> None:
     for warning in fetch_warnings(data):
         sys.stderr.write(f"WARNING: {warning}\n")
 
+    domain_store = None
+    if args.domain_json is not None:
+        if not args.domain_json.is_file():
+            parser.error(f"Domain store not found: {args.domain_json}")
+        try:
+            domain_store = load_domain_store(args.domain_json)
+        except ValueError as exc:
+            parser.error(str(exc))
+        sys.stderr.write(f"Loaded {len(domain_store)} domain record(s) from {args.domain_json}\n")
+
     results, uniprot_fetches = classify_fetch_json(
         data,
         dnaj_rows=args.dnaj_rows,
         allow_fetch=not args.no_fetch,
         min_confidence=args.min_confidence,
+        domain_store=domain_store,
     )
 
     if not results:

@@ -41,6 +41,11 @@ GF_AA = frozenset("GF")
 MOTIF_SUMMARY_COLUMNS = [
     "domain_family",
     "n_members",
+    # Members available before sampling, and the aligner used. Without these a
+    # conservation score cannot be interpreted: it may be a MAFFT alignment of the whole
+    # family or a progressive alignment of a sample of it.
+    "n_available",
+    "msa_backend",
     "n_aligned_columns",
     "best_window_length",
     "best_conservation_score",

@@ -45,7 +45,17 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 # --- Constants ---
-_DEFAULT_ARCH_URL = "https://www.ebi.ac.uk/interpro/api/entry/InterPro/IPR001623/?ida&page_size=20&format=json"
+# page_size is the number of architectures returned *per request*, not the number the run
+# uses; the fetch pages through `next` until it has what was asked for. Both were conflated
+# before: page_size was 20, only the first page was ever read, and --n-architectures could
+# therefore only reduce the count below 20. The "top 20 architectures" that defined the
+# dataset was that default, not a decision - and it excluded 4,135 of 4,155 architectures
+# holding 66,725 of the 248,251 proteins carrying the J-domain signature, which is exactly
+# where a rare-architecture search should have been looking.
+_ARCH_PAGE_SIZE = 100
+_DEFAULT_ARCH_URL = (
+    f"https://www.ebi.ac.uk/interpro/api/entry/InterPro/IPR001623/?ida&page_size={_ARCH_PAGE_SIZE}&format=json"
+)
 _DEFAULT_N_ARCHITECTURES = 20
 _DEFAULT_CONCURRENCY = 5
 _DEFAULT_OUTPUT = Path("ipr001623_domain_architectures_no_dedup.json")
@@ -58,6 +68,42 @@ PROTEIN_URL_TEMPLATE = (
 # Known values from the InterPro website, used to confirm we start at architecture #1
 EXPECTED_FIRST_IDA_ID = "500088c3adc88e8af670fe08554083396acf46f3"
 EXPECTED_FIRST_PROTEIN_COUNT = 98256
+
+
+def warn_if_unexpected_first_architecture(architectures: list[ApiResponse]) -> list[str]:
+    """Warn when the architecture list no longer starts where it used to.
+
+    The first group returned by InterPro should be the bare J-domain architecture. A
+    different ``ida_id`` means the ordering or the entry itself changed upstream, which
+    silently changes what ``-n`` selects.
+
+    Args:
+        architectures: Architecture groups as returned by the InterPro API.
+
+    Returns:
+        Human-readable warnings (also emitted through the module logger).
+    """
+    warnings: list[str] = []
+    if not architectures:
+        warnings.append("InterPro returned no architecture groups for IPR001623.")
+    else:
+        first = architectures[0]
+        first_ida_id = str(first.get("ida_id", ""))
+        if first_ida_id != EXPECTED_FIRST_IDA_ID:
+            warnings.append(
+                f"First architecture is {first_ida_id or '<missing>'}, expected {EXPECTED_FIRST_IDA_ID}; "
+                f"InterPro ordering may have changed.",
+            )
+        reported = int(first.get("unique_proteins") or 0)
+        if reported and abs(reported - EXPECTED_FIRST_PROTEIN_COUNT) > EXPECTED_FIRST_PROTEIN_COUNT // 10:
+            warnings.append(
+                f"First architecture reports {reported} unique proteins, "
+                f"more than 10% away from the recorded {EXPECTED_FIRST_PROTEIN_COUNT}.",
+            )
+
+    for warning in warnings:
+        logger.warning("%s", warning)
+    return warnings
 
 
 async def fetch_proteins_for_arch(
@@ -126,6 +172,34 @@ async def fetch_proteins_for_arch(
     }
 
 
+async def fetch_architecture_groups(
+    session: aiohttp.ClientSession,
+    first_url: str,
+    limit: int,
+) -> list[ApiResponse]:
+    """Page through the architecture list until ``limit`` groups are collected.
+
+    InterPro returns architectures one page at a time with a ``next`` link. Reading only
+    the first page silently caps the dataset at the page size, which is how this project
+    came to be built on 20 architectures out of 4,155.
+
+    Stops early when the API runs out of pages, so asking for more than exist is not an
+    error - it simply returns everything.
+    """
+    collected: list[ApiResponse] = []
+    url: str | None = first_url
+    while url and len(collected) < limit:
+        payload = await get_with_retry(session, url)
+        validate_api_response(payload)
+        page: list[ApiResponse] = payload.get("results", [])
+        if not page:
+            break
+        collected.extend(page)
+        url = payload.get("next")
+        logger.info("  %s architecture group(s) so far", len(collected))
+    return collected[:limit]
+
+
 async def main() -> None:
     """Fetch all proteins for the top N domain architectures of IPR001623."""
     parser = argparse.ArgumentParser(description="Fetch IPR001623 domain architectures from InterPro.")
@@ -158,10 +232,9 @@ async def main() -> None:
 
     async with aiohttp.ClientSession(headers=INTERPRO_HEADERS) as session:
         logger.info("Fetching architecture groups from InterPro...")
-        arch_data = await get_with_retry(session, arch_url)
-        validate_api_response(arch_data)
-        architectures: list[ApiResponse] = arch_data.get("results", [])[:n_architectures]
+        architectures = await fetch_architecture_groups(session, arch_url, n_architectures)
         logger.info("Got %s architecture group(s).", len(architectures))
+        warn_if_unexpected_first_architecture(architectures)
 
         logger.info("Fetching proteins...")
         tasks = [

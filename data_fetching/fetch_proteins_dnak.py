@@ -1,4 +1,15 @@
-"""Fetches all proteins for InterPro entry IPR012725 (DnaK).
+"""Fetches all proteins for InterPro entry IPR013126 (Hsp70 family).
+
+The target was IPR012725 ("Chaperone DnaK"), which InterPro declares a *child* of
+IPR013126 and which covers only the bacterial subfamily. Every eukaryotic Hsp70 sits
+outside it - yeast SSA1, SSB2 and KAR2, human HSPA8 and HSPA1A are all absent - and those
+are precisely the partners a mostly eukaryotic set of J-domain proteins interacts with. A
+pairing analysis run against IPR012725 would have had almost nothing to pair.
+
+IPR013126 is fetched instead, and IPR012725 is retained as a *label* rather than a second
+fetch: it identifies the bacterial subtype within the set, which is one of the subtype axes
+the pairing analysis distinguishes. Fetching both would double-count, since the first is a
+strict subset of the second - verified against the declared hierarchy and by sampling.
 
 This entry has no domain architecture groups. The script retrieves all proteins
 that match the entry directly using the InterPro protein API.
@@ -12,7 +23,7 @@ Once the fetch completes successfully the checkpoint file is deleted.
 Output format::
 
     {
-        "entry_accession": "IPR012725",
+        "entry_accession": "IPR013126",
         "proteins_reported": 100000,
         "total_proteins_fetched": 100000,
         "proteins": [...],
@@ -45,11 +56,20 @@ from data_fetching.utils import (
 configure_logging()
 logger = logging.getLogger(__name__)
 
-ENTRY_ACCESSION = "IPR012725"
+ENTRY_ACCESSION = "IPR013126"
+
+# Retained as a subtype label, not as a fetch target. IPR012725 is a declared child of
+# IPR013126, so every protein carrying it is already in the set; what it adds is the
+# knowledge that a protein is a bacterial DnaK rather than a eukaryotic Hsp70.
+BACTERIAL_SUBTYPE_ENTRY = "IPR012725"
 
 _DEFAULT_PAGE_SIZE = 200
-_DEFAULT_OUTPUT = Path("ipr012725_proteins.json")
-_DEFAULT_CHECKPOINT = Path("ipr012725_checkpoint.json")
+# Derived from the target rather than written out. These were hard-coded to IPR012725 and
+# were left behind when the fetch was retargeted to the parent family, so a run against
+# IPR013126 wrote its 113,682 proteins into files named for the bacterial subtype - and a
+# later subtype fetch would have resumed from that checkpoint and silently inherited them.
+_DEFAULT_OUTPUT = Path(f"{ENTRY_ACCESSION.lower()}_proteins.json")
+_DEFAULT_CHECKPOINT = Path(f"{ENTRY_ACCESSION.lower()}_checkpoint.json")
 _DEFAULT_MAX_PERCENT = 0.01
 _DEFAULT_MAX_ABS = 100
 _REQUEST_TIMEOUT = 300
@@ -59,7 +79,7 @@ def make_protein_url(entry_accession: str, page_size: int) -> str:
     """Build the first-page InterPro API URL for fetching proteins by entry accession.
 
     Args:
-        entry_accession: The InterPro entry accession (e.g. IPR012725).
+        entry_accession: The InterPro entry accession (e.g. IPR013126).
         page_size: Number of results to request per page.
 
     Returns:
@@ -180,8 +200,8 @@ async def fetch_all_proteins(
 
 
 async def main() -> None:
-    """Fetch all proteins for InterPro entry IPR012725 (DnaK)."""
-    parser = argparse.ArgumentParser(description="Fetch proteins for IPR012725 (DnaK).")
+    """Fetch all proteins for InterPro entry IPR013126 (Hsp70 family)."""
+    parser = argparse.ArgumentParser(description="Fetch proteins for IPR013126 (Hsp70 family).")
     parser.add_argument(
         "-p",
         "--page-size",

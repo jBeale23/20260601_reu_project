@@ -1,6 +1,49 @@
 #!/bin/bash
-# Shared helpers for Rockfish SLURM array jobs (affetch and pocket charge).
+# Shared helpers for Rockfish SLURM array jobs (affetch, pocket charge, domain fetch).
 # Source from worker scripts: source "${PROJECT_DIR}/scripts/slurm/rockfish_common.sh"
+
+# Activate a Python environment that may be either a conda env or a plain venv.
+#
+# `conda activate` fails on a venv ("Not a conda environment") and `source bin/activate`
+# is wrong for a conda env, so the worker cannot assume one flavour. A venv is identified
+# by its pyvenv.cfg marker.
+rockfish_activate_env() {
+	local env_path="$1"
+
+	if [[ -f ${env_path}/pyvenv.cfg ]]; then
+		# shellcheck disable=SC1091  # path is only known at run time
+		source "${env_path}/bin/activate"
+	else
+		conda activate "${env_path}"
+	fi
+}
+
+# First 1-based snapshot line owned by a chunked array task.
+rockfish_chunk_start() {
+	local task_id="$1"
+	local chunk_size="$2"
+
+	printf "%s\n" "$(((task_id - 1) * chunk_size + 1))"
+}
+
+# Per-chunk marker used in completion/failure logs and output filenames.
+#
+# The marker combines the starting line with a digest of the accessions in the chunk, so
+# it identifies *content*, not just a position. If the master accession list is ever
+# rebuilt and line offsets shift, the digest changes and the chunk is re-fetched instead
+# of being silently skipped as "already done" while covering different proteins.
+rockfish_chunk_marker() {
+	local start="$1"
+	local queue_file="${2:-}"
+	local chunk_size="${3:-1}"
+	local digest="nocontent"
+
+	if [[ -n ${queue_file} && -f ${queue_file} ]]; then
+		digest="$(sed -n "${start},$((start + chunk_size - 1))p" "${queue_file}" | sha1sum | cut -c1-8)"
+	fi
+
+	printf "chunk_%06d_%s\n" "${start}" "${digest}"
+}
 
 # Read accession for this array task from a submit-time snapshot (fixed line mapping).
 rockfish_read_task_accession() {
@@ -120,4 +163,41 @@ rockfish_diagnose_missing_pdb() {
 
 	export ROCKFISH_MISSING_DETAIL="No AF PDB/CIF under ${structures_dir} for model v${model_version}"
 	printf "missing_any_structure\n"
+}
+
+# Put MAFFT on PATH, trying every source this cluster actually offers.
+#
+# Rockfish exposes mafft only through the SBGrid/BioGrids module trees, which are licensed
+# and refuse to load from a batch job, so `ml mafft/<version>` cannot be relied on. The
+# portable upstream tarball is self-contained and needs no root, so a copy vendored under
+# the project directory is the primary source; a module is tried only as a fallback for
+# clusters where one does load.
+#
+# Returns 0 when mafft is callable afterwards, 1 otherwise. Callers decide whether a
+# missing aligner is fatal or merely downgrades them to the progressive fallback.
+rockfish_ensure_mafft() {
+	local vendor_dir="${1:-}"
+	local module_name="${2:-}"
+
+	if command -v mafft > /dev/null 2>&1; then
+		return 0
+	fi
+
+	if [[ -n ${vendor_dir} && -x ${vendor_dir}/mafft ]]; then
+		PATH="${vendor_dir}:${PATH}"
+		export PATH
+		if command -v mafft > /dev/null 2>&1; then
+			return 0
+		fi
+	fi
+
+	if [[ -n ${module_name} ]]; then
+		# Never let a failed module load abort a job running under `set -e`.
+		ml "${module_name}" > /dev/null 2>&1 || true
+		if command -v mafft > /dev/null 2>&1; then
+			return 0
+		fi
+	fi
+
+	return 1
 }

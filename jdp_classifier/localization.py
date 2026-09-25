@@ -28,12 +28,13 @@ class LocalizationResult:
     localization_source: LocalizationSource
 
 
-def _entry_id(entry: dict[str, Any]) -> str:
-    return str(entry.get("accession", ""))
-
-
-def _entry_type(entry: dict[str, Any]) -> str:
-    return str(entry.get("type", ""))
+def _entry_ids(entry: dict[str, Any]) -> set[str]:
+    """Accession plus integrated InterPro parent, so member-database hits also count."""
+    ids = {str(entry.get("accession", ""))}
+    integrated = str(entry.get("integrated") or "")
+    if integrated:
+        ids.add(integrated)
+    return ids
 
 
 def scan_entries_for_localization(protein: dict[str, Any]) -> LocalizationResult:
@@ -42,17 +43,12 @@ def scan_entries_for_localization(protein: dict[str, Any]) -> LocalizationResult
     has_signal = False
 
     for entry in protein.get("entries", []):
-        entry_id = _entry_id(entry)
-        entry_type = _entry_type(entry)
+        entry_ids = _entry_ids(entry)
 
-        if entry_id in TRANSMEMBRANE_INTERPRO or entry_id in TRANSMEMBRANE_PFAM:
-            has_tm = True
-        if entry_type in TRANSMEMBRANE_PFAM:
+        if entry_ids & (TRANSMEMBRANE_INTERPRO | TRANSMEMBRANE_PFAM):
             has_tm = True
 
-        if entry_id in SIGNAL_PEPTIDE_INTERPRO or entry_id in SIGNAL_PEPTIDE_PFAM:
-            has_signal = True
-        if entry_type in SIGNAL_PEPTIDE_PFAM:
+        if entry_ids & (SIGNAL_PEPTIDE_INTERPRO | SIGNAL_PEPTIDE_PFAM):
             has_signal = True
 
     if has_tm or has_signal:

@@ -3,10 +3,15 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python>=3.12
+  # bio-shark (optional 'layout' extra) supports >=3.8,<3.13.
+  - python>=3.12,<3.13
   - pip
+  # Aligner for the MSA-routed structured domains; a binary, so not installable via pip.
+  # Without it the pipeline falls back to a weaker progressive aligner and says so.
+  - mafft>=7.5
   - pip:
     - aiohttp>=3.9
+    - biopython>=1.84
     - tqdm>=4.66
     - pytest>=8.0
     - pytest-asyncio>=0.23

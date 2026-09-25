@@ -7,6 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from domain_layout.records import protein_dict_from_record
 from jdp_classifier.sequence import get_protein_sequence, slice_sequence
 from motif_conservation.constants import (
     DOMAIN_FAMILY_LABELS,
@@ -16,7 +17,10 @@ from motif_conservation.constants import (
 from scripts.extract_uniprot_ids import normalize_accession
 
 if TYPE_CHECKING:
+    from collections.abc import Container
     from pathlib import Path
+
+    from domain_layout.records import DomainStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,7 +116,11 @@ def group_domain_families(proteins: list[dict[str, Any]]) -> dict[str, list[Doma
 
 
 def load_dnaj_proteins(fetch_json: Path) -> list[dict[str, Any]]:
-    """Load protein records from a DnaJ architecture fetch JSON."""
+    """Load protein records from a DnaJ architecture fetch JSON.
+
+    Raises:
+        ValueError: If the JSON is neither an architecture nor a protein fetch file.
+    """
     data = json.loads(fetch_json.read_text(encoding="utf-8"))
     proteins: list[dict[str, Any]] = []
     if "architectures" in data:
@@ -124,6 +132,28 @@ def load_dnaj_proteins(fetch_json: Path) -> list[dict[str, Any]]:
         msg = f"Unrecognized fetch JSON layout in {fetch_json}"
         raise ValueError(msg)
     return proteins
+
+
+def proteins_from_domain_store(
+    store: DomainStore,
+    *,
+    restrict_to: Container[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Render domain-store records as InterPro-shaped protein dicts.
+
+    The architecture fetch carries no sequences or per-protein domain coordinates, so
+    slicing domain families from it yields nothing. Records fetched by
+    ``fetch-protein-domains`` carry both, which is what this adapter exposes.
+
+    Args:
+        store: Domain store loaded from ``fetch-protein-domains`` output.
+        restrict_to: Optional accession set to keep (e.g. accessions from a fetch JSON).
+    """
+    return [
+        protein_dict_from_record(record)
+        for record in store
+        if record.has_sequence and (restrict_to is None or record.accession in restrict_to)
+    ]
 
 
 def dedupe_slices_by_accession(slices: list[DomainSlice]) -> list[DomainSlice]:

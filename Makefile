@@ -4,7 +4,7 @@ TESTS := $(wildcard tests/*.sh)
 .PHONY: clean install test pytest
 
 install:
-	pip install -e ".[dev]"
+	pip install -e ".[dev,structure]"
 
 clean:
 ifneq ($(wildcard tests/*.log),)
@@ -28,4 +28,4 @@ test:
 	[ "$$FAILURE" -eq 0 ] || exit 1
 
 pytest:
-	pytest tests/ -v
+	pytest tests/ -v -rs

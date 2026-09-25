@@ -1,0 +1,2148 @@
+{
+  "store_version": 1,
+  "source": "cli",
+  "n_proteins": 7,
+  "n_failed": 0,
+  "n_with_sequence": 7,
+  "proteins": {
+    "P08622": {
+      "accession": "P08622",
+      "name": "Chaperone protein DnaJ",
+      "length": 376,
+      "sequence": "MAKQDYYEILGVSKTAEEREIRKAYKRLAMKYHPDRNQGDKEAEAKFKEIKEAYEVLTDSQKRAAYDQYGHAAFEQGGMGGGGFGGGADFSDIFGDVFGDIFGGGRGRQRAARGADLRYNMELTLEEAVRGVTKEIRIPTLEECDVCHGSGAKPGTQPQTCPTCHGSGQVQMRQGFFAVQQTCPHCQGRGTLIKDPCNKCHGHGRVERSKTLSVKIPAGVDTGDRIRLAGEGEAGEHGAPAGDLYVQVQVKQHPIFEREGNNLYCEVPINFAMAALGGEIEVPTLDGRVKLKVPGETQTGKLFRMRGKGVKSVRGGAQGDLLCRVVVETPVGLNERQKQLLQELQESFGGPTGEHNSPRSKSFFDGVKKFFDDLTR",
+      "source_database": "reviewed",
+      "organism_tax_id": "83333",
+      "organism_name": "Escherichia coli (strain K12)",
+      "ida_accession": "4c275c5b1a9013dc340467b55eb2299a4c377a31",
+      "entries": [
+        {
+          "accession": "SSF46565",
+          "source_database": "ssf",
+          "entry_type": "homologous_superfamily",
+          "name": "Chaperone J-domain",
+          "integrated": "IPR036869",
+          "fragments": [
+            {
+              "start": 1,
+              "end": 106
+            }
+          ]
+        },
+        {
+          "accession": "G3DSA:1.10.287.110",
+          "source_database": "cathgene3d",
+          "entry_type": "homologous_superfamily",
+          "name": "DnaJ domain",
+          "integrated": "IPR036869",
+          "fragments": [
+            {
+              "start": 1,
+              "end": 112
+            }
+          ]
+        },
+        {
+          "accession": "IPR036869",
+          "source_database": "interpro",
+          "entry_type": "homologous_superfamily",
+          "name": "Chaperone J-domain superfamily",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 1,
+              "end": 112
+            }
+          ]
+        },
+        {
+          "accession": "NF008035",
+          "source_database": "ncbifam",
+          "entry_type": "family",
+          "name": "molecular chaperone DnaJ",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 1,
+              "end": 375
+            }
+          ]
+        },
+        {
+          "accession": "IPR012724",
+          "source_database": "interpro",
+          "entry_type": "family",
+          "name": "Chaperone DnaJ",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 2,
+              "end": 370
+            }
+          ]
+        },
+        {
+          "accession": "MF_01152",
+          "source_database": "hamap",
+          "entry_type": "family",
+          "name": "Chaperone protein DnaJ [dnaJ]",
+          "integrated": "IPR012724",
+          "fragments": [
+            {
+              "start": 2,
+              "end": 370
+            }
+          ]
+        },
+        {
+          "accession": "SM00271",
+          "source_database": "smart",
+          "entry_type": "domain",
+          "name": "DnaJ molecular chaperone homology domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 4,
+              "end": 62
+            }
+          ]
+        },
+        {
+          "accession": "IPR001623",
+          "source_database": "interpro",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 4,
+              "end": 81
+            }
+          ]
+        },
+        {
+          "accession": "cd06257",
+          "source_database": "cdd",
+          "entry_type": "domain",
+          "name": "DnaJ",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 5,
+              "end": 59
+            }
+          ]
+        },
+        {
+          "accession": "PF00226",
+          "source_database": "pfam",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 5,
+              "end": 67
+            }
+          ]
+        },
+        {
+          "accession": "PS50076",
+          "source_database": "profile",
+          "entry_type": "domain",
+          "name": "dnaJ domain profile",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 5,
+              "end": 70
+            }
+          ]
+        },
+        {
+          "accession": "PTHR43096",
+          "source_database": "panther",
+          "entry_type": "family",
+          "name": "DnaJ",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 5,
+              "end": 347
+            }
+          ]
+        },
+        {
+          "accession": "TIGR02349",
+          "source_database": "ncbifam",
+          "entry_type": "family",
+          "name": "molecular chaperone DnaJ",
+          "integrated": "IPR012724",
+          "fragments": [
+            {
+              "start": 5,
+              "end": 347
+            }
+          ]
+        },
+        {
+          "accession": "PR00625",
+          "source_database": "prints",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 7,
+              "end": 25
+            },
+            {
+              "start": 25,
+              "end": 40
+            },
+            {
+              "start": 42,
+              "end": 62
+            },
+            {
+              "start": 62,
+              "end": 81
+            }
+          ]
+        },
+        {
+          "accession": "IPR018253",
+          "source_database": "interpro",
+          "entry_type": "conserved_site",
+          "name": "DnaJ domain, conserved site",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 47,
+              "end": 66
+            }
+          ]
+        },
+        {
+          "accession": "PS00636",
+          "source_database": "prosite",
+          "entry_type": "conserved_site",
+          "name": "Nt-dnaJ domain signature",
+          "integrated": "IPR018253",
+          "fragments": [
+            {
+              "start": 47,
+              "end": 66
+            }
+          ]
+        },
+        {
+          "accession": "IPR008971",
+          "source_database": "interpro",
+          "entry_type": "homologous_superfamily",
+          "name": "HSP40/DnaJ peptide-binding",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 111,
+              "end": 256
+            },
+            {
+              "start": 256,
+              "end": 341
+            }
+          ]
+        },
+        {
+          "accession": "SSF49493",
+          "source_database": "ssf",
+          "entry_type": "homologous_superfamily",
+          "name": "HSP40/DnaJ peptide-binding domain",
+          "integrated": "IPR008971",
+          "fragments": [
+            {
+              "start": 111,
+              "end": 166
+            },
+            {
+              "start": 210,
+              "end": 256
+            },
+            {
+              "start": 256,
+              "end": 341
+            }
+          ]
+        },
+        {
+          "accession": "G3DSA:2.60.260.20",
+          "source_database": "cathgene3d",
+          "entry_type": "homologous_superfamily",
+          "name": "Urease metallochaperone UreE, N-terminal domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 113,
+              "end": 135
+            },
+            {
+              "start": 210,
+              "end": 249
+            },
+            {
+              "start": 252,
+              "end": 352
+            }
+          ]
+        },
+        {
+          "accession": "cd10747",
+          "source_database": "cdd",
+          "entry_type": "domain",
+          "name": "C-terminal substrate binding domain of DnaJ and HSP40",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 115,
+              "end": 333
+            }
+          ]
+        },
+        {
+          "accession": "IPR002939",
+          "source_database": "interpro",
+          "entry_type": "domain",
+          "name": "Chaperone DnaJ, C-terminal",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 117,
+              "end": 330
+            }
+          ]
+        },
+        {
+          "accession": "PF01556",
+          "source_database": "pfam",
+          "entry_type": "domain",
+          "name": "DnaJ C terminal domain",
+          "integrated": "IPR002939",
+          "fragments": [
+            {
+              "start": 117,
+              "end": 143
+            },
+            {
+              "start": 205,
+              "end": 330
+            }
+          ]
+        },
+        {
+          "accession": "IPR036410",
+          "source_database": "interpro",
+          "entry_type": "homologous_superfamily",
+          "name": "Heat shock protein DnaJ, cysteine-rich domain superfamily",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 131,
+              "end": 207
+            }
+          ]
+        },
+        {
+          "accession": "SSF57938",
+          "source_database": "ssf",
+          "entry_type": "homologous_superfamily",
+          "name": "DnaJ/Hsp40 cysteine-rich domain",
+          "integrated": "IPR036410",
+          "fragments": [
+            {
+              "start": 131,
+              "end": 207
+            }
+          ]
+        },
+        {
+          "accession": "IPR001305",
+          "source_database": "interpro",
+          "entry_type": "domain",
+          "name": "Heat shock protein DnaJ, cysteine-rich domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 131,
+              "end": 209
+            }
+          ]
+        },
+        {
+          "accession": "PS51188",
+          "source_database": "profile",
+          "entry_type": "domain",
+          "name": "Zinc finger CR-type profile",
+          "integrated": "IPR001305",
+          "fragments": [
+            {
+              "start": 131,
+              "end": 209
+            }
+          ]
+        },
+        {
+          "accession": "G3DSA:2.10.230.10",
+          "source_database": "cathgene3d",
+          "entry_type": "homologous_superfamily",
+          "name": "Heat shock protein DnaJ, cysteine-rich domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 136,
+              "end": 209
+            }
+          ]
+        },
+        {
+          "accession": "PF00684",
+          "source_database": "pfam",
+          "entry_type": "domain",
+          "name": "DnaJ central domain",
+          "integrated": "IPR001305",
+          "fragments": [
+            {
+              "start": 144,
+              "end": 204
+            }
+          ]
+        },
+        {
+          "accession": "cd10719",
+          "source_database": "cdd",
+          "entry_type": "domain",
+          "name": "Zinc finger domain of DnaJ and HSP40",
+          "integrated": "IPR001305",
+          "fragments": [
+            {
+              "start": 144,
+              "end": 204
+            }
+          ]
+        },
+        {
+          "accession": "PF27439",
+          "source_database": "pfam",
+          "entry_type": "family",
+          "name": "Chaperone protein DnaJ C-terminal region",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 336,
+              "end": 373
+            }
+          ]
+        }
+      ]
+    },
+    "P25685": {
+      "accession": "P25685",
+      "name": "DnaJ homolog subfamily B member 1",
+      "length": 340,
+      "sequence": "MGKDYYQTLGLARGASDEEIKRAYRRQALRYHPDKNKEPGAEEKFKEIAEAYDVLSDPRKREIFDRYGEEGLKGSGPSGGSGGGANGTSFSYTFHGDPHAMFAEFFGGRNPFDTFFGQRNGEEGMDIDDPFSGFPMGMGGFTNVNFGRSRSAQEPARKKQDPPVTHDLRVSLEEIYSGCTKKMKISHKRLNPDGKSIRNEDKILTIEVKKGWKEGTKITFPKEGDQTSNNIPADIVFVLKDKPHNIFKRDGSDVIYPARISLREALCGCTVNVPTLDGRTIPVVFKDVIRPGMRRKVPGEGLPLPKTPEKRGDLIIEFEVIFPERIPQTSRTVLEQVLPI",
+      "source_database": "reviewed",
+      "organism_tax_id": "9606",
+      "organism_name": "Homo sapiens (Human)",
+      "ida_accession": "b36fbaa28ca2d38c62e70de9b499db9b7e495914",
+      "entries": [
+        {
+          "accession": "IPR051339",
+          "source_database": "interpro",
+          "entry_type": "family",
+          "name": "DnaJ homolog subfamily B",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 1,
+              "end": 339
+            }
+          ]
+        },
+        {
+          "accession": "PTHR24078",
+          "source_database": "panther",
+          "entry_type": "family",
+          "name": "DnaJ homolog subfamily B",
+          "integrated": "IPR051339",
+          "fragments": [
+            {
+              "start": 1,
+              "end": 339
+            }
+          ]
+        },
+        {
+          "accession": "G3DSA:1.10.287.110",
+          "source_database": "cathgene3d",
+          "entry_type": "homologous_superfamily",
+          "name": "DnaJ domain",
+          "integrated": "IPR036869",
+          "fragments": [
+            {
+              "start": 2,
+              "end": 119
+            }
+          ]
+        },
+        {
+          "accession": "IPR036869",
+          "source_database": "interpro",
+          "entry_type": "homologous_superfamily",
+          "name": "Chaperone J-domain superfamily",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 2,
+              "end": 119
+            }
+          ]
+        },
+        {
+          "accession": "SM00271",
+          "source_database": "smart",
+          "entry_type": "domain",
+          "name": "DnaJ molecular chaperone homology domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 3,
+              "end": 60
+            }
+          ]
+        },
+        {
+          "accession": "IPR001623",
+          "source_database": "interpro",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 3,
+              "end": 79
+            }
+          ]
+        },
+        {
+          "accession": "SSF46565",
+          "source_database": "ssf",
+          "entry_type": "homologous_superfamily",
+          "name": "Chaperone J-domain",
+          "integrated": "IPR036869",
+          "fragments": [
+            {
+              "start": 3,
+              "end": 117
+            }
+          ]
+        },
+        {
+          "accession": "cd06257",
+          "source_database": "cdd",
+          "entry_type": "domain",
+          "name": "DnaJ",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 4,
+              "end": 57
+            }
+          ]
+        },
+        {
+          "accession": "PF00226",
+          "source_database": "pfam",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 4,
+              "end": 65
+            }
+          ]
+        },
+        {
+          "accession": "PS50076",
+          "source_database": "profile",
+          "entry_type": "domain",
+          "name": "dnaJ domain profile",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 4,
+              "end": 68
+            }
+          ]
+        },
+        {
+          "accession": "PR00625",
+          "source_database": "prints",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 6,
+              "end": 24
+            },
+            {
+              "start": 24,
+              "end": 39
+            },
+            {
+              "start": 40,
+              "end": 60
+            },
+            {
+              "start": 60,
+              "end": 79
+            }
+          ]
+        },
+        {
+          "accession": "IPR018253",
+          "source_database": "interpro",
+          "entry_type": "conserved_site",
+          "name": "DnaJ domain, conserved site",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 45,
+              "end": 64
+            }
+          ]
+        },
+        {
+          "accession": "PS00636",
+          "source_database": "prosite",
+          "entry_type": "conserved_site",
+          "name": "Nt-dnaJ domain signature",
+          "integrated": "IPR018253",
+          "fragments": [
+            {
+              "start": 45,
+              "end": 64
+            }
+          ]
+        },
+        {
+          "accession": "G3DSA:2.60.260.20",
+          "source_database": "cathgene3d",
+          "entry_type": "homologous_superfamily",
+          "name": "Urease metallochaperone UreE, N-terminal domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 160,
+              "end": 243
+            },
+            {
+              "start": 244,
+              "end": 324
+            }
+          ]
+        },
+        {
+          "accession": "cd10747",
+          "source_database": "cdd",
+          "entry_type": "domain",
+          "name": "C-terminal substrate binding domain of DnaJ and HSP40",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 162,
+              "end": 326
+            }
+          ]
+        },
+        {
+          "accession": "IPR008971",
+          "source_database": "interpro",
+          "entry_type": "homologous_superfamily",
+          "name": "HSP40/DnaJ peptide-binding",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 163,
+              "end": 244
+            },
+            {
+              "start": 247,
+              "end": 331
+            }
+          ]
+        },
+        {
+          "accession": "SSF49493",
+          "source_database": "ssf",
+          "entry_type": "homologous_superfamily",
+          "name": "HSP40/DnaJ peptide-binding domain",
+          "integrated": "IPR008971",
+          "fragments": [
+            {
+              "start": 163,
+              "end": 244
+            },
+            {
+              "start": 247,
+              "end": 331
+            }
+          ]
+        },
+        {
+          "accession": "IPR002939",
+          "source_database": "interpro",
+          "entry_type": "domain",
+          "name": "Chaperone DnaJ, C-terminal",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 165,
+              "end": 323
+            }
+          ]
+        },
+        {
+          "accession": "PF01556",
+          "source_database": "pfam",
+          "entry_type": "domain",
+          "name": "DnaJ C terminal domain",
+          "integrated": "IPR002939",
+          "fragments": [
+            {
+              "start": 165,
+              "end": 323
+            }
+          ]
+        }
+      ]
+    },
+    "P25686": {
+      "accession": "P25686",
+      "name": "DnaJ homolog subfamily B member 2",
+      "length": 324,
+      "sequence": "MASYYEILDVPRSASADDIKKAYRRKALQWHPDKNPDNKEFAEKKFKEVAEAYEVLSDKHKREIYDRYGREGLTGTGTGPSRAEAGSGGPGFTFTFRSPEEVFREFFGSGDPFAELFDDLGPFSELQNRGSRHSGPFFTFSSSFPGHSDFSSSSFSFSPGAGAFRSVSTSTTFVQGRRITTRRIMENGQERVEVEEDGQLKSVTINGVPDDLALGLELSRREQQPSVTSRSGGTQVQQTPASCPLDSDLSEDEDLQLAMAYSLSEMEAAGKKPAGGREAQHRRQGRPKAQHQDPGLGGTQEGARGEATKRSPSPEEKASRCLIL",
+      "source_database": "reviewed",
+      "organism_tax_id": "9606",
+      "organism_name": "Homo sapiens (Human)",
+      "ida_accession": "500088c3adc88e8af670fe08554083396acf46f3",
+      "entries": [
+        {
+          "accession": "IPR043183",
+          "source_database": "interpro",
+          "entry_type": "family",
+          "name": "DnaJ homolog subfamily B member 2/6-like",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 1,
+              "end": 264
+            }
+          ]
+        },
+        {
+          "accession": "PTHR45168",
+          "source_database": "panther",
+          "entry_type": "family",
+          "name": "DNAJ HOMOLOG SUBFAMILY B MEMBER 2",
+          "integrated": "IPR043183",
+          "fragments": [
+            {
+              "start": 1,
+              "end": 264
+            }
+          ]
+        },
+        {
+          "accession": "SM00271",
+          "source_database": "smart",
+          "entry_type": "domain",
+          "name": "DnaJ molecular chaperone homology domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 2,
+              "end": 61
+            }
+          ]
+        },
+        {
+          "accession": "IPR001623",
+          "source_database": "interpro",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 2,
+              "end": 80
+            }
+          ]
+        },
+        {
+          "accession": "SSF46565",
+          "source_database": "ssf",
+          "entry_type": "homologous_superfamily",
+          "name": "Chaperone J-domain",
+          "integrated": "IPR036869",
+          "fragments": [
+            {
+              "start": 2,
+              "end": 113
+            }
+          ]
+        },
+        {
+          "accession": "G3DSA:1.10.287.110",
+          "source_database": "cathgene3d",
+          "entry_type": "homologous_superfamily",
+          "name": "DnaJ domain",
+          "integrated": "IPR036869",
+          "fragments": [
+            {
+              "start": 2,
+              "end": 115
+            }
+          ]
+        },
+        {
+          "accession": "IPR036869",
+          "source_database": "interpro",
+          "entry_type": "homologous_superfamily",
+          "name": "Chaperone J-domain superfamily",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 2,
+              "end": 115
+            }
+          ]
+        },
+        {
+          "accession": "PF00226",
+          "source_database": "pfam",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 3,
+              "end": 66
+            }
+          ]
+        },
+        {
+          "accession": "PS50076",
+          "source_database": "profile",
+          "entry_type": "domain",
+          "name": "dnaJ domain profile",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 3,
+              "end": 69
+            }
+          ]
+        },
+        {
+          "accession": "cd06257",
+          "source_database": "cdd",
+          "entry_type": "domain",
+          "name": "DnaJ",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 4,
+              "end": 58
+            }
+          ]
+        },
+        {
+          "accession": "PR00625",
+          "source_database": "prints",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 5,
+              "end": 23
+            },
+            {
+              "start": 23,
+              "end": 38
+            },
+            {
+              "start": 41,
+              "end": 61
+            },
+            {
+              "start": 61,
+              "end": 80
+            }
+          ]
+        },
+        {
+          "accession": "IPR018253",
+          "source_database": "interpro",
+          "entry_type": "conserved_site",
+          "name": "DnaJ domain, conserved site",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 46,
+              "end": 65
+            }
+          ]
+        },
+        {
+          "accession": "PS00636",
+          "source_database": "prosite",
+          "entry_type": "conserved_site",
+          "name": "Nt-dnaJ domain signature",
+          "integrated": "IPR018253",
+          "fragments": [
+            {
+              "start": 46,
+              "end": 65
+            }
+          ]
+        },
+        {
+          "accession": "IPR003903",
+          "source_database": "interpro",
+          "entry_type": "conserved_site",
+          "name": "Ubiquitin interacting motif",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 207,
+              "end": 226
+            },
+            {
+              "start": 250,
+              "end": 269
+            }
+          ]
+        },
+        {
+          "accession": "SM00726",
+          "source_database": "smart",
+          "entry_type": "domain",
+          "name": "Ubiquitin-interacting motif.",
+          "integrated": "IPR003903",
+          "fragments": [
+            {
+              "start": 207,
+              "end": 226
+            },
+            {
+              "start": 250,
+              "end": 269
+            }
+          ]
+        },
+        {
+          "accession": "G3DSA:6.10.140.100",
+          "source_database": "cathgene3d",
+          "entry_type": "homologous_superfamily",
+          "name": "None",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 208,
+              "end": 275
+            }
+          ]
+        },
+        {
+          "accession": "PS50330",
+          "source_database": "profile",
+          "entry_type": "domain",
+          "name": "Ubiquitin-interacting motif (UIM) domain profile",
+          "integrated": "IPR003903",
+          "fragments": [
+            {
+              "start": 250,
+              "end": 269
+            }
+          ]
+        }
+      ]
+    },
+    "P31689": {
+      "accession": "P31689",
+      "name": "DnaJ homolog subfamily A member 1",
+      "length": 397,
+      "sequence": "MVKETTYYDVLGVKPNATQEELKKAYRKLALKYHPDKNPNEGEKFKQISQAYEVLSDAKKRELYDKGGEQAIKEGGAGGGFGSPMDIFDMFFGGGGRMQRERRGKNVVHQLSVTLEDLYNGATRKLALQKNVICDKCEGRGGKKGAVECCPNCRGTGMQIRIHQIGPGMVQQIQSVCMECQGHGERISPKDRCKSCNGRKIVREKKILEVHIDKGMKDGQKITFHGEGDQEPGLEPGDIIIVLDQKDHAVFTRRGEDLFMCMDIQLVEALCGFQKPISTLDNRTIVITSHPGQIVKHGDIKCVLNEGMPIYRRPYEKGRLIIEFKVNFPENGFLSPDKLSLLEKLLPERKEVEETDEMDQVELVDFDPNQERRRHYNGEAYEDDEHHPRGGVQCQTS",
+      "source_database": "reviewed",
+      "organism_tax_id": "9606",
+      "organism_name": "Homo sapiens (Human)",
+      "ida_accession": "009a4105d0b2ae9aa2aa7435e492b440f6147828",
+      "entries": [
+        {
+          "accession": "SSF46565",
+          "source_database": "ssf",
+          "entry_type": "homologous_superfamily",
+          "name": "Chaperone J-domain",
+          "integrated": "IPR036869",
+          "fragments": [
+            {
+              "start": 2,
+              "end": 98
+            }
+          ]
+        },
+        {
+          "accession": "IPR036869",
+          "source_database": "interpro",
+          "entry_type": "homologous_superfamily",
+          "name": "Chaperone J-domain superfamily",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 2,
+              "end": 104
+            }
+          ]
+        },
+        {
+          "accession": "G3DSA:1.10.287.110",
+          "source_database": "cathgene3d",
+          "entry_type": "homologous_superfamily",
+          "name": "DnaJ domain",
+          "integrated": "IPR036869",
+          "fragments": [
+            {
+              "start": 3,
+              "end": 104
+            }
+          ]
+        },
+        {
+          "accession": "IPR012724",
+          "source_database": "interpro",
+          "entry_type": "family",
+          "name": "Chaperone DnaJ",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 3,
+              "end": 376
+            }
+          ]
+        },
+        {
+          "accession": "MF_01152",
+          "source_database": "hamap",
+          "entry_type": "family",
+          "name": "Chaperone protein DnaJ [dnaJ]",
+          "integrated": "IPR012724",
+          "fragments": [
+            {
+              "start": 3,
+              "end": 376
+            }
+          ]
+        },
+        {
+          "accession": "IPR044713",
+          "source_database": "interpro",
+          "entry_type": "family",
+          "name": "DnaJ homolog subfamily A member 1/2-like",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 4,
+              "end": 380
+            }
+          ]
+        },
+        {
+          "accession": "PTHR43888",
+          "source_database": "panther",
+          "entry_type": "family",
+          "name": "DNAJ-LIKE-2, ISOFORM A-RELATED",
+          "integrated": "IPR044713",
+          "fragments": [
+            {
+              "start": 4,
+              "end": 380
+            }
+          ]
+        },
+        {
+          "accession": "SM00271",
+          "source_database": "smart",
+          "entry_type": "domain",
+          "name": "DnaJ molecular chaperone homology domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 5,
+              "end": 60
+            }
+          ]
+        },
+        {
+          "accession": "IPR001623",
+          "source_database": "interpro",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 5,
+              "end": 79
+            }
+          ]
+        },
+        {
+          "accession": "cd06257",
+          "source_database": "cdd",
+          "entry_type": "domain",
+          "name": "DnaJ",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 6,
+              "end": 57
+            }
+          ]
+        },
+        {
+          "accession": "PF00226",
+          "source_database": "pfam",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 6,
+              "end": 65
+            }
+          ]
+        },
+        {
+          "accession": "PS50076",
+          "source_database": "profile",
+          "entry_type": "domain",
+          "name": "dnaJ domain profile",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 6,
+              "end": 68
+            }
+          ]
+        },
+        {
+          "accession": "PR00625",
+          "source_database": "prints",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 8,
+              "end": 26
+            },
+            {
+              "start": 26,
+              "end": 41
+            },
+            {
+              "start": 60,
+              "end": 79
+            }
+          ]
+        },
+        {
+          "accession": "IPR018253",
+          "source_database": "interpro",
+          "entry_type": "conserved_site",
+          "name": "DnaJ domain, conserved site",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 45,
+              "end": 64
+            }
+          ]
+        },
+        {
+          "accession": "PS00636",
+          "source_database": "prosite",
+          "entry_type": "conserved_site",
+          "name": "Nt-dnaJ domain signature",
+          "integrated": "IPR018253",
+          "fragments": [
+            {
+              "start": 45,
+              "end": 64
+            }
+          ]
+        },
+        {
+          "accession": "IPR008971",
+          "source_database": "interpro",
+          "entry_type": "homologous_superfamily",
+          "name": "HSP40/DnaJ peptide-binding",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 100,
+              "end": 331
+            }
+          ]
+        },
+        {
+          "accession": "SSF49493",
+          "source_database": "ssf",
+          "entry_type": "homologous_superfamily",
+          "name": "HSP40/DnaJ peptide-binding domain",
+          "integrated": "IPR008971",
+          "fragments": [
+            {
+              "start": 100,
+              "end": 155
+            },
+            {
+              "start": 206,
+              "end": 259
+            },
+            {
+              "start": 250,
+              "end": 331
+            }
+          ]
+        },
+        {
+          "accession": "G3DSA:2.60.260.20",
+          "source_database": "cathgene3d",
+          "entry_type": "homologous_superfamily",
+          "name": "Urease metallochaperone UreE, N-terminal domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 105,
+              "end": 133
+            },
+            {
+              "start": 201,
+              "end": 241
+            },
+            {
+              "start": 248,
+              "end": 330
+            }
+          ]
+        },
+        {
+          "accession": "cd10747",
+          "source_database": "cdd",
+          "entry_type": "domain",
+          "name": "C-terminal substrate binding domain of DnaJ and HSP40",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 105,
+              "end": 331
+            }
+          ]
+        },
+        {
+          "accession": "IPR002939",
+          "source_database": "interpro",
+          "entry_type": "domain",
+          "name": "Chaperone DnaJ, C-terminal",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 108,
+              "end": 329
+            }
+          ]
+        },
+        {
+          "accession": "PF01556",
+          "source_database": "pfam",
+          "entry_type": "domain",
+          "name": "DnaJ C terminal domain",
+          "integrated": "IPR002939",
+          "fragments": [
+            {
+              "start": 108,
+              "end": 133
+            },
+            {
+              "start": 201,
+              "end": 329
+            }
+          ]
+        },
+        {
+          "accession": "IPR001305",
+          "source_database": "interpro",
+          "entry_type": "domain",
+          "name": "Heat shock protein DnaJ, cysteine-rich domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 121,
+              "end": 205
+            }
+          ]
+        },
+        {
+          "accession": "PS51188",
+          "source_database": "profile",
+          "entry_type": "domain",
+          "name": "Zinc finger CR-type profile",
+          "integrated": "IPR001305",
+          "fragments": [
+            {
+              "start": 121,
+              "end": 205
+            }
+          ]
+        },
+        {
+          "accession": "IPR036410",
+          "source_database": "interpro",
+          "entry_type": "homologous_superfamily",
+          "name": "Heat shock protein DnaJ, cysteine-rich domain superfamily",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 131,
+              "end": 203
+            }
+          ]
+        },
+        {
+          "accession": "SSF57938",
+          "source_database": "ssf",
+          "entry_type": "homologous_superfamily",
+          "name": "DnaJ/Hsp40 cysteine-rich domain",
+          "integrated": "IPR036410",
+          "fragments": [
+            {
+              "start": 131,
+              "end": 203
+            }
+          ]
+        },
+        {
+          "accession": "G3DSA:2.10.230.10",
+          "source_database": "cathgene3d",
+          "entry_type": "homologous_superfamily",
+          "name": "Heat shock protein DnaJ, cysteine-rich domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 134,
+              "end": 200
+            }
+          ]
+        },
+        {
+          "accession": "PF00684",
+          "source_database": "pfam",
+          "entry_type": "domain",
+          "name": "DnaJ central domain",
+          "integrated": "IPR001305",
+          "fragments": [
+            {
+              "start": 134,
+              "end": 200
+            }
+          ]
+        },
+        {
+          "accession": "cd10719",
+          "source_database": "cdd",
+          "entry_type": "domain",
+          "name": "Zinc finger domain of DnaJ and HSP40",
+          "integrated": "IPR001305",
+          "fragments": [
+            {
+              "start": 134,
+              "end": 200
+            }
+          ]
+        }
+      ]
+    },
+    "P36659": {
+      "accession": "P36659",
+      "name": "Curved DNA-binding protein",
+      "length": 306,
+      "sequence": "MELKDYYAIMGVKPTDDLKTIKTAYRRLARKYHPDVSKEPDAEARFKEVAEAWEVLSDEQRRAEYDQMWQHRNDPQFNRQFHHGDGQSFNAEDFDDIFSSIFGQHARQSRQRPATRGHDIEIEVAVFLEETLTEHKRTISYNLPVYNAFGMIEQEIPKTLNVKIPAGVGNGQRIRLKGQGTPGENGGPNGDLWLVIHIAPHPLFDIVGQDLEIVVPVSPWEAALGAKVTVPTLKESILLTIPPGSQAGQRLRVKGKGLVSKKQTGDLYAVLKIVMPPKPDENTAALWQQLADAQSSFDPRKDWGKA",
+      "source_database": "reviewed",
+      "organism_tax_id": "83333",
+      "organism_name": "Escherichia coli (strain K12)",
+      "ida_accession": "b36fbaa28ca2d38c62e70de9b499db9b7e495914",
+      "entries": [
+        {
+          "accession": "SSF46565",
+          "source_database": "ssf",
+          "entry_type": "homologous_superfamily",
+          "name": "Chaperone J-domain",
+          "integrated": "IPR036869",
+          "fragments": [
+            {
+              "start": 1,
+              "end": 93
+            }
+          ]
+        },
+        {
+          "accession": "IPR036869",
+          "source_database": "interpro",
+          "entry_type": "homologous_superfamily",
+          "name": "Chaperone J-domain superfamily",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 1,
+              "end": 114
+            }
+          ]
+        },
+        {
+          "accession": "IPR023859",
+          "source_database": "interpro",
+          "entry_type": "family",
+          "name": "DNA-binding protein, curved-DNA",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 1,
+              "end": 306
+            }
+          ]
+        },
+        {
+          "accession": "MF_01154",
+          "source_database": "hamap",
+          "entry_type": "family",
+          "name": "Curved DNA-binding protein [cbpA]",
+          "integrated": "IPR023859",
+          "fragments": [
+            {
+              "start": 1,
+              "end": 306
+            }
+          ]
+        },
+        {
+          "accession": "NF007618",
+          "source_database": "ncbifam",
+          "entry_type": "family",
+          "name": "curved DNA-binding protein",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 1,
+              "end": 306
+            }
+          ]
+        },
+        {
+          "accession": "G3DSA:1.10.287.110",
+          "source_database": "cathgene3d",
+          "entry_type": "homologous_superfamily",
+          "name": "DnaJ domain",
+          "integrated": "IPR036869",
+          "fragments": [
+            {
+              "start": 3,
+              "end": 114
+            }
+          ]
+        },
+        {
+          "accession": "SM00271",
+          "source_database": "smart",
+          "entry_type": "domain",
+          "name": "DnaJ molecular chaperone homology domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 4,
+              "end": 61
+            }
+          ]
+        },
+        {
+          "accession": "IPR001623",
+          "source_database": "interpro",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 4,
+              "end": 80
+            }
+          ]
+        },
+        {
+          "accession": "cd06257",
+          "source_database": "cdd",
+          "entry_type": "domain",
+          "name": "DnaJ",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 5,
+              "end": 58
+            }
+          ]
+        },
+        {
+          "accession": "PF00226",
+          "source_database": "pfam",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 5,
+              "end": 66
+            }
+          ]
+        },
+        {
+          "accession": "PS50076",
+          "source_database": "profile",
+          "entry_type": "domain",
+          "name": "dnaJ domain profile",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 5,
+              "end": 69
+            }
+          ]
+        },
+        {
+          "accession": "PTHR43096",
+          "source_database": "panther",
+          "entry_type": "family",
+          "name": "DnaJ",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 5,
+              "end": 141
+            }
+          ]
+        },
+        {
+          "accession": "PR00625",
+          "source_database": "prints",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 7,
+              "end": 25
+            },
+            {
+              "start": 25,
+              "end": 40
+            },
+            {
+              "start": 41,
+              "end": 61
+            },
+            {
+              "start": 61,
+              "end": 80
+            }
+          ]
+        },
+        {
+          "accession": "IPR018253",
+          "source_database": "interpro",
+          "entry_type": "conserved_site",
+          "name": "DnaJ domain, conserved site",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 46,
+              "end": 65
+            }
+          ]
+        },
+        {
+          "accession": "PS00636",
+          "source_database": "prosite",
+          "entry_type": "conserved_site",
+          "name": "Nt-dnaJ domain signature",
+          "integrated": "IPR018253",
+          "fragments": [
+            {
+              "start": 46,
+              "end": 65
+            }
+          ]
+        },
+        {
+          "accession": "G3DSA:2.60.260.20",
+          "source_database": "cathgene3d",
+          "entry_type": "homologous_superfamily",
+          "name": "Urease metallochaperone UreE, N-terminal domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 115,
+              "end": 199
+            },
+            {
+              "start": 200,
+              "end": 276
+            }
+          ]
+        },
+        {
+          "accession": "IPR008971",
+          "source_database": "interpro",
+          "entry_type": "homologous_superfamily",
+          "name": "HSP40/DnaJ peptide-binding",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 115,
+              "end": 210
+            },
+            {
+              "start": 204,
+              "end": 284
+            }
+          ]
+        },
+        {
+          "accession": "SSF49493",
+          "source_database": "ssf",
+          "entry_type": "homologous_superfamily",
+          "name": "HSP40/DnaJ peptide-binding domain",
+          "integrated": "IPR008971",
+          "fragments": [
+            {
+              "start": 115,
+              "end": 210
+            },
+            {
+              "start": 204,
+              "end": 284
+            }
+          ]
+        },
+        {
+          "accession": "cd10747",
+          "source_database": "cdd",
+          "entry_type": "domain",
+          "name": "C-terminal substrate binding domain of DnaJ and HSP40",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 119,
+              "end": 278
+            }
+          ]
+        },
+        {
+          "accession": "IPR002939",
+          "source_database": "interpro",
+          "entry_type": "domain",
+          "name": "Chaperone DnaJ, C-terminal",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 120,
+              "end": 276
+            }
+          ]
+        },
+        {
+          "accession": "PF01556",
+          "source_database": "pfam",
+          "entry_type": "domain",
+          "name": "DnaJ C terminal domain",
+          "integrated": "IPR002939",
+          "fragments": [
+            {
+              "start": 120,
+              "end": 276
+            }
+          ]
+        },
+        {
+          "accession": "G3DSA:1.20.5.460",
+          "source_database": "cathgene3d",
+          "entry_type": "homologous_superfamily",
+          "name": "Single helix bin",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 277,
+              "end": 306
+            }
+          ]
+        }
+      ]
+    },
+    "Q9H3Z4": {
+      "accession": "Q9H3Z4",
+      "name": "DnaJ homolog subfamily C member 5",
+      "length": 198,
+      "sequence": "MADQRQRSLSTSGESLYHVLGLDKNATSDDIKKSYRKLALKYHPDKNPDNPEAADKFKEINNAHAILTDATKRNIYDKYGSLGLYVAEQFGEENVNTYFVLSSWWAKALFVFCGLLTCCYCCCCLCCCFNCCCGKCKPKAPEGEETEFYVSPEDLEAQLQSDEREATDTPIVIQPASATETTQLTADSHPSYHTDGFN",
+      "source_database": "reviewed",
+      "organism_tax_id": "9606",
+      "organism_name": "Homo sapiens (Human)",
+      "ida_accession": "500088c3adc88e8af670fe08554083396acf46f3",
+      "entries": [
+        {
+          "accession": "G3DSA:1.10.287.110",
+          "source_database": "cathgene3d",
+          "entry_type": "homologous_superfamily",
+          "name": "DnaJ domain",
+          "integrated": "IPR036869",
+          "fragments": [
+            {
+              "start": 1,
+              "end": 105
+            }
+          ]
+        },
+        {
+          "accession": "IPR036869",
+          "source_database": "interpro",
+          "entry_type": "homologous_superfamily",
+          "name": "Chaperone J-domain superfamily",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 1,
+              "end": 116
+            }
+          ]
+        },
+        {
+          "accession": "IPR051434",
+          "source_database": "interpro",
+          "entry_type": "family",
+          "name": "DnaJ homolog subfamily C member 5",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 2,
+              "end": 193
+            }
+          ]
+        },
+        {
+          "accession": "PTHR44027",
+          "source_database": "panther",
+          "entry_type": "family",
+          "name": "DnaJ homolog subfamily C member 5",
+          "integrated": "IPR051434",
+          "fragments": [
+            {
+              "start": 2,
+              "end": 193
+            }
+          ]
+        },
+        {
+          "accession": "SM00271",
+          "source_database": "smart",
+          "entry_type": "domain",
+          "name": "DnaJ molecular chaperone homology domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 14,
+              "end": 72
+            }
+          ]
+        },
+        {
+          "accession": "IPR001623",
+          "source_database": "interpro",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 14,
+              "end": 91
+            }
+          ]
+        },
+        {
+          "accession": "SSF46565",
+          "source_database": "ssf",
+          "entry_type": "homologous_superfamily",
+          "name": "Chaperone J-domain",
+          "integrated": "IPR036869",
+          "fragments": [
+            {
+              "start": 14,
+              "end": 116
+            }
+          ]
+        },
+        {
+          "accession": "PS50076",
+          "source_database": "profile",
+          "entry_type": "domain",
+          "name": "dnaJ domain profile",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 15,
+              "end": 80
+            }
+          ]
+        },
+        {
+          "accession": "PF00226",
+          "source_database": "pfam",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 16,
+              "end": 77
+            }
+          ]
+        },
+        {
+          "accession": "cd06257",
+          "source_database": "cdd",
+          "entry_type": "domain",
+          "name": "DnaJ",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 17,
+              "end": 69
+            }
+          ]
+        },
+        {
+          "accession": "PR00625",
+          "source_database": "prints",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 17,
+              "end": 35
+            },
+            {
+              "start": 35,
+              "end": 50
+            },
+            {
+              "start": 52,
+              "end": 72
+            },
+            {
+              "start": 72,
+              "end": 91
+            }
+          ]
+        },
+        {
+          "accession": "IPR018253",
+          "source_database": "interpro",
+          "entry_type": "conserved_site",
+          "name": "DnaJ domain, conserved site",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 57,
+              "end": 76
+            }
+          ]
+        },
+        {
+          "accession": "PS00636",
+          "source_database": "prosite",
+          "entry_type": "conserved_site",
+          "name": "Nt-dnaJ domain signature",
+          "integrated": "IPR018253",
+          "fragments": [
+            {
+              "start": 57,
+              "end": 76
+            }
+          ]
+        }
+      ]
+    },
+    "Q9NVH1": {
+      "accession": "Q9NVH1",
+      "name": "DnaJ homolog subfamily C member 11",
+      "length": 559,
+      "sequence": "MATALSEEELDNEDYYSLLNVRREASSEELKAAYRRLCMLYHPDKHRDPELKSQAERLFNLVHQAYEVLSDPQTRAIYDIYGKRGLEMEGWEVVERRRTPAEIREEFERLQREREERRLQQRTNPKGTISVGVDATDLFDRYDEEYEDVSGSSFPQIEINKMHISQSIEAPLTATDTAILSGSLSTQNGNGGGSINFALRRVTSAKGWGELEFGAGDLQGPLFGLKLFRNLTPRCFVTTNCALQFSSRGIRPGLTTVLARNLDKNTVGYLQWRWGIQSAMNTSIVRDTKTSHFTVALQLGIPHSFALISYQHKFQDDDQTRVKGSLKAGFFGTVVEYGAERKISRHSVLGAAVSVGVPQGVSLKVKLNRASQTYFFPIHLTDQLLPSAMFYATVGPLVVYFAMHRLIIKPYLRAQKEKELEKQRESAATDVLQKKQEAESAVRLMQESVRRIIEAEESRMGLIIVNAWYGKFVNDKSRKSEKVKVIDVTVPLQCLVKDSKLILTEASKAGLPGFYDPCVGEEKNLKVLYQFRGVLHQVMVLDSEALRIPKQSHRIDTDG",
+      "source_database": "reviewed",
+      "organism_tax_id": "9606",
+      "organism_name": "Homo sapiens (Human)",
+      "ida_accession": "7af100da74edbfcc46bd7a56638182ba479c286e",
+      "entries": [
+        {
+          "accession": "G3DSA:1.10.287.110",
+          "source_database": "cathgene3d",
+          "entry_type": "homologous_superfamily",
+          "name": "DnaJ domain",
+          "integrated": "IPR036869",
+          "fragments": [
+            {
+              "start": 3,
+              "end": 97
+            }
+          ]
+        },
+        {
+          "accession": "IPR036869",
+          "source_database": "interpro",
+          "entry_type": "homologous_superfamily",
+          "name": "Chaperone J-domain superfamily",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 3,
+              "end": 97
+            }
+          ]
+        },
+        {
+          "accession": "IPR052243",
+          "source_database": "interpro",
+          "entry_type": "family",
+          "name": "Mitochondrial inner membrane organizing protein",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 6,
+              "end": 556
+            }
+          ]
+        },
+        {
+          "accession": "PTHR44157",
+          "source_database": "panther",
+          "entry_type": "family",
+          "name": "Mitochondrial inner membrane organizing protein",
+          "integrated": "IPR052243",
+          "fragments": [
+            {
+              "start": 6,
+              "end": 556
+            }
+          ]
+        },
+        {
+          "accession": "SSF46565",
+          "source_database": "ssf",
+          "entry_type": "homologous_superfamily",
+          "name": "Chaperone J-domain",
+          "integrated": "IPR036869",
+          "fragments": [
+            {
+              "start": 10,
+              "end": 84
+            }
+          ]
+        },
+        {
+          "accession": "SM00271",
+          "source_database": "smart",
+          "entry_type": "domain",
+          "name": "DnaJ molecular chaperone homology domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 13,
+              "end": 74
+            }
+          ]
+        },
+        {
+          "accession": "IPR001623",
+          "source_database": "interpro",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 13,
+              "end": 93
+            }
+          ]
+        },
+        {
+          "accession": "cd06257",
+          "source_database": "cdd",
+          "entry_type": "domain",
+          "name": "DnaJ",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 14,
+              "end": 71
+            }
+          ]
+        },
+        {
+          "accession": "PF00226",
+          "source_database": "pfam",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 14,
+              "end": 79
+            }
+          ]
+        },
+        {
+          "accession": "PS50076",
+          "source_database": "profile",
+          "entry_type": "domain",
+          "name": "dnaJ domain profile",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 14,
+              "end": 82
+            }
+          ]
+        },
+        {
+          "accession": "PR00625",
+          "source_database": "prints",
+          "entry_type": "domain",
+          "name": "DnaJ domain",
+          "integrated": "IPR001623",
+          "fragments": [
+            {
+              "start": 16,
+              "end": 34
+            },
+            {
+              "start": 34,
+              "end": 49
+            },
+            {
+              "start": 54,
+              "end": 74
+            },
+            {
+              "start": 74,
+              "end": 93
+            }
+          ]
+        },
+        {
+          "accession": "IPR018253",
+          "source_database": "interpro",
+          "entry_type": "conserved_site",
+          "name": "DnaJ domain, conserved site",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 59,
+              "end": 78
+            }
+          ]
+        },
+        {
+          "accession": "PS00636",
+          "source_database": "prosite",
+          "entry_type": "conserved_site",
+          "name": "Nt-dnaJ domain signature",
+          "integrated": "IPR018253",
+          "fragments": [
+            {
+              "start": 59,
+              "end": 78
+            }
+          ]
+        },
+        {
+          "accession": "IPR055225",
+          "source_database": "interpro",
+          "entry_type": "domain",
+          "name": "DNAJC11-like, beta-barrel domain",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 162,
+              "end": 374
+            }
+          ]
+        },
+        {
+          "accession": "PF22774",
+          "source_database": "pfam",
+          "entry_type": "domain",
+          "name": "DNAJC11, beta-barrel domain",
+          "integrated": "IPR055225",
+          "fragments": [
+            {
+              "start": 162,
+              "end": 374
+            }
+          ]
+        },
+        {
+          "accession": "IPR024586",
+          "source_database": "interpro",
+          "entry_type": "domain",
+          "name": "DnaJ-like protein C11, C-terminal",
+          "integrated": "",
+          "fragments": [
+            {
+              "start": 422,
+              "end": 549
+            }
+          ]
+        },
+        {
+          "accession": "PF11875",
+          "source_database": "pfam",
+          "entry_type": "domain",
+          "name": "DnaJ-like protein C11, C-terminal",
+          "integrated": "IPR024586",
+          "fragments": [
+            {
+              "start": 422,
+              "end": 549
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "failures": {}
+}

@@ -2,11 +2,18 @@
 
 import asyncio
 import logging
+from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 import data_fetching.fetch_architectures_dnaj as m
+from data_fetching import fetch_architectures_dnaj
+from data_fetching.fetch_architectures_dnaj import (
+    EXPECTED_FIRST_IDA_ID,
+    EXPECTED_FIRST_PROTEIN_COUNT,
+    warn_if_unexpected_first_architecture,
+)
 from data_fetching.utils import check_count_anomaly, get_with_retry, validate_api_response
 
 # --- Constants ---
@@ -445,3 +452,92 @@ async def test_fetch_proteins_for_arch_semaphore_released_after_partial() -> Non
         await m.fetch_proteins_for_arch(MagicMock(), arch, 1, semaphore, 1)
 
     assert semaphore._value == 1
+
+
+def test_warn_if_unexpected_first_architecture_accepts_known_first() -> None:
+    """The recorded first architecture produces no warnings."""
+    architectures = [
+        {"ida_id": EXPECTED_FIRST_IDA_ID, "unique_proteins": EXPECTED_FIRST_PROTEIN_COUNT},
+    ]
+    assert warn_if_unexpected_first_architecture(architectures) == []
+
+
+def test_warn_if_unexpected_first_architecture_flags_reordering() -> None:
+    """A different leading ida_id warns that InterPro ordering changed."""
+    warnings = warn_if_unexpected_first_architecture([{"ida_id": "deadbeef", "unique_proteins": 98256}])
+    assert any("expected" in warning for warning in warnings)
+
+
+def test_warn_if_unexpected_first_architecture_flags_count_drift() -> None:
+    """A large protein-count change on the first architecture is reported."""
+    warnings = warn_if_unexpected_first_architecture(
+        [{"ida_id": EXPECTED_FIRST_IDA_ID, "unique_proteins": 10}],
+    )
+    assert any("unique proteins" in warning for warning in warnings)
+
+
+def test_warn_if_unexpected_first_architecture_flags_empty_response() -> None:
+    """An empty architecture list is itself a warning."""
+    assert warn_if_unexpected_first_architecture([]) == [
+        "InterPro returned no architecture groups for IPR001623.",
+    ]
+
+
+def test_architecture_fetch_pages_beyond_the_first_response() -> None:
+    """Reading one page silently caps the dataset at the page size.
+
+    That is how this project came to be built on 20 architectures out of 4,155: page_size
+    was fixed in the URL, only the first response was read, and the count argument could
+    only ever reduce below it.
+    """
+    pages = {
+        "first": {"count": 5, "next": "second", "results": [{"ida_id": f"a{i}"} for i in range(3)]},
+        "second": {"count": 5, "next": None, "results": [{"ida_id": f"b{i}"} for i in range(2)]},
+    }
+
+    async def fake_get(_session: object, url: str) -> dict[str, object]:
+        return pages[url]
+
+    with mock.patch.object(fetch_architectures_dnaj, "get_with_retry", fake_get):
+        collected = asyncio.run(
+            fetch_architectures_dnaj.fetch_architecture_groups(object(), "first", 10),
+        )
+    assert [item["ida_id"] for item in collected] == ["a0", "a1", "a2", "b0", "b1"]
+
+
+def test_architecture_fetch_stops_at_the_requested_limit() -> None:
+    """Paging must not overshoot; the limit is the number of architectures used."""
+    pages = {
+        "first": {"count": 9, "next": "second", "results": [{"ida_id": f"a{i}"} for i in range(5)]},
+        "second": {"count": 9, "next": None, "results": [{"ida_id": f"b{i}"} for i in range(4)]},
+    }
+
+    async def fake_get(_session: object, url: str) -> dict[str, object]:
+        return pages[url]
+
+    with mock.patch.object(fetch_architectures_dnaj, "get_with_retry", fake_get):
+        collected = asyncio.run(
+            fetch_architectures_dnaj.fetch_architecture_groups(object(), "first", 7),
+        )
+    assert len(collected) == 7
+
+
+def test_architecture_fetch_handles_running_out_of_pages() -> None:
+    """Asking for more architectures than exist returns everything, not an error."""
+    pages = {"only": {"count": 2, "next": None, "results": [{"ida_id": "a"}, {"ida_id": "b"}]}}
+
+    async def fake_get(_session: object, url: str) -> dict[str, object]:
+        return pages[url]
+
+    with mock.patch.object(fetch_architectures_dnaj, "get_with_retry", fake_get):
+        collected = asyncio.run(
+            fetch_architectures_dnaj.fetch_architecture_groups(object(), "only", 4155),
+        )
+    assert len(collected) == 2
+
+
+def test_architecture_page_size_is_not_the_dataset_size() -> None:
+    """The URL's page_size must not double as the number of architectures used."""
+    assert "page_size=" in fetch_architectures_dnaj._DEFAULT_ARCH_URL
+    # The default number of architectures is a separate, explicit decision.
+    assert fetch_architectures_dnaj._DEFAULT_N_ARCHITECTURES != fetch_architectures_dnaj._ARCH_PAGE_SIZE

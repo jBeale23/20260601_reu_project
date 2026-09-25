@@ -3,7 +3,7 @@
 # Submit the Rockfish affetch array job with a fixed per-job accession snapshot.
 #
 # Usage (from project root on Rockfish):
-#   prepare-rockfish-accessions ipr012725_proteins.json --wk-dir "${WK_DIR}"
+#   prepare-rockfish-accessions ipr013126_proteins.json --wk-dir "${WK_DIR}"
 #   bash scripts/slurm/submit_affetch_rockfish.sh
 #
 # Failed accessions in failed_accessions.txt are skipped by default.
